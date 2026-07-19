@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
 import api from '../../services/api';
-import { Search, MapPin, Clock, ShoppingBag, Utensils, Star, Check, CreditCard, ShieldCheck } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { generateReceiptPDF } from '../../utils/receiptGenerator';
+import { Search, MapPin, Clock, ShoppingBag, Utensils, Star, CreditCard, ShieldCheck } from 'lucide-react';
 
 const CustomerDashboard = () => {
+  const { user } = useAuth();
+  
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
@@ -18,6 +22,7 @@ const CustomerDashboard = () => {
   const [reserveLoading, setReserveLoading] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState('details'); // details, payment, success
   const [generatedToken, setGeneratedToken] = useState('');
+  const [orderResult, setOrderResult] = useState(null);
 
   // Mock card inputs
   const [cardName, setCardName] = useState('');
@@ -56,6 +61,7 @@ const CustomerDashboard = () => {
     setReserveQty(1);
     setCheckoutStep('details');
     setGeneratedToken('');
+    setOrderResult(null);
     setCardName('');
     setCardNumber('');
     setCardExpiry('');
@@ -84,6 +90,7 @@ const CustomerDashboard = () => {
       });
       
       setGeneratedToken(data.token);
+      setOrderResult(data);
       setCheckoutStep('success');
       
       // Refresh inventory behind modal
@@ -93,6 +100,30 @@ const CustomerDashboard = () => {
     } finally {
       setReserveLoading(false);
     }
+  };
+
+  const handleDownloadReceipt = () => {
+    if (!orderResult || !selectedItem || !user) return;
+
+    // Build the fully populated order details model for the PDF renderer
+    const completedOrderForPdf = {
+      ...orderResult,
+      customer: {
+        name: user.name,
+        phoneNumber: user.phoneNumber
+      },
+      restaurant: {
+        restaurantName: selectedItem.restaurant.restaurantName,
+        address: selectedItem.restaurant.address
+      },
+      foodItem: {
+        name: selectedItem.name,
+        pickupStartTime: selectedItem.pickupStartTime,
+        pickupEndTime: selectedItem.pickupEndTime
+      }
+    };
+
+    generateReceiptPDF(completedOrderForPdf, user.name);
   };
 
   const formatCardNumber = (value) => {
@@ -408,7 +439,7 @@ const CustomerDashboard = () => {
             {/* STEP 3: MOCK PAYMENT & OTP TOKEN GENERATION SUCCESS */}
             {checkoutStep === 'success' && (
               <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
-                <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: 'var(--color-primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto' }}>
+                <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: 'var(--color-primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
                   <ShieldCheck className="text-emerald" size={32} />
                 </div>
                 
@@ -429,13 +460,22 @@ const CustomerDashboard = () => {
                   Token code emailed via Nodemailer!
                 </div>
 
-                <button 
-                  type="button" 
-                  className="btn btn-primary btn-block" 
-                  onClick={() => setSelectedItem(null)}
-                >
-                  Done
-                </button>
+                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary btn-block" 
+                    onClick={handleDownloadReceipt}
+                  >
+                    Download Receipt
+                  </button>
+                  <button 
+                    type="button" 
+                    className="btn btn-primary btn-block" 
+                    onClick={() => setSelectedItem(null)}
+                  >
+                    Done
+                  </button>
+                </div>
               </div>
             )}
 

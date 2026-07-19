@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
 import api from '../../services/api';
-import { ClipboardList, Clock, AlertTriangle, Star, Check, XCircle } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { generateReceiptPDF } from '../../utils/receiptGenerator';
+import { ClipboardList, Clock, Star, Check } from 'lucide-react';
 
 const CustomerOrders = () => {
+  const { user } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
@@ -145,17 +148,27 @@ const CustomerOrders = () => {
                       </p>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                       <p style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }} className="text-emerald">
                         <Check size={14} /> Paid via card (last 4: {order.paymentDetails?.cardLast4 || '4242'}).
                       </p>
-                      <button 
-                        onClick={() => handleCancelOrder(order._id)}
-                        className="btn btn-danger btn-sm"
-                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
-                      >
-                        Cancel & Refund
-                      </button>
+                      
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button 
+                          onClick={() => generateReceiptPDF(order, user?.name)}
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                        >
+                          Download PDF
+                        </button>
+                        <button 
+                          onClick={() => handleCancelOrder(order._id)}
+                          className="btn btn-danger btn-sm"
+                          style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -181,8 +194,8 @@ const CustomerOrders = () => {
                     <div key={order._id} className="glass-panel" style={{ padding: '1.25rem', borderLeft: isCollected ? '3px solid var(--color-primary)' : '3px solid var(--color-danger)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                          <p style={{ fontSize: '0.85rem', fontWeight: 600, margin: 0 }}>{order.foodItem.name}</p>
-                          <p className="text-muted" style={{ fontSize: '0.75rem' }}>{order.restaurant.restaurantName}</p>
+                          <p style={{ fontSize: '0.85rem', fontWeight: 600, margin: 0 }}>{order.foodItem?.name || 'Surplus Item'}</p>
+                          <p className="text-muted" style={{ fontSize: '0.75rem' }}>{order.restaurant?.restaurantName || 'Partner Restaurant'}</p>
                         </div>
                         <div style={{ textAlign: 'right' }}>
                           <span className={`badge ${isCollected ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: '0.65rem' }}>
@@ -192,10 +205,18 @@ const CustomerOrders = () => {
                         </div>
                       </div>
 
-                      {/* Review Action */}
-                      {isCollected && (
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.75rem', borderTop: '1px solid var(--glass-border)', paddingTop: '0.75rem' }}>
-                          {order.isRated ? (
+                      {/* Actions row for past listings */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.75rem', borderTop: '1px solid var(--glass-border)', paddingTop: '0.75rem' }}>
+                        <button
+                          onClick={() => generateReceiptPDF(order, user?.name)}
+                          className="btn btn-secondary btn-sm"
+                          style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem', border: '1px solid var(--glass-border)', background: 'transparent' }}
+                        >
+                          Receipt PDF
+                        </button>
+                        
+                        {isCollected && (
+                          order.isRated ? (
                             <span className="badge badge-info" style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                               <Star size={10} fill="currentColor" /> Reviewed
                             </span>
@@ -207,9 +228,9 @@ const CustomerOrders = () => {
                             >
                               Leave Review
                             </button>
-                          )}
-                        </div>
-                      )}
+                          )
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -239,8 +260,8 @@ const CustomerOrders = () => {
             ) : (
               <form onSubmit={handleReviewSubmit}>
                 <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
-                  <h4 style={{ fontSize: '1rem' }}>{selectedOrder.foodItem.name}</h4>
-                  <p className="text-emerald" style={{ fontWeight: 600, fontSize: '0.85rem' }}>{selectedOrder.restaurant.restaurantName}</p>
+                  <h4 style={{ fontSize: '1rem' }}>{selectedOrder.foodItem?.name}</h4>
+                  <p className="text-emerald" style={{ fontWeight: 600, fontSize: '0.85rem' }}>{selectedOrder.restaurant?.restaurantName}</p>
                 </div>
 
                 {errorMsg && (
@@ -252,7 +273,7 @@ const CustomerOrders = () => {
                 <div className="form-group">
                   <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Rating Score</span>
-                    <span className="text-amber" style={{ display: 'flex', alignItems: 'center', gap: '0.2, fontWeight: 600' }}>
+                    <span className="text-amber" style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', fontWeight: 600 }}>
                       <Star size={14} fill="currentColor" /> {rating} / 5
                     </span>
                   </label>
