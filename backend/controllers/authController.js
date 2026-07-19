@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const RestaurantProfile = require('../models/RestaurantProfile');
+const { sendOTP } = require('../config/mailer');
 
 // Generate JWT Token
 const generateToken = (id) => {
@@ -9,7 +10,7 @@ const generateToken = (id) => {
   });
 };
 
-// @desc    Register a new user (Customer, Restaurant, or Admin)
+// @desc    Register a new user & Send OTP
 // @route   POST /api/auth/register
 // @access  Public
 const registerUser = async (req, res) => {
@@ -22,13 +23,20 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ message: 'User already exists with this email' });
     }
 
-    // Create user
+    // Generate 6-digit OTP
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes expiry
+
+    // Create user (unverified by default)
     const user = await User.create({
       name,
       email,
       password,
       role: role || 'customer',
-      phoneNumber
+      phoneNumber,
+      isVerified: false,
+      otpCode,
+      otpExpiry
     });
 
     if (user) {
@@ -37,7 +45,7 @@ const registerUser = async (req, res) => {
       // If user is a restaurant, initialize restaurant profile
       if (user.role === 'restaurant') {
         if (!restaurantName || !address || !cuisineType) {
-          // If we fail restaurant creation parameters, rollback user creation
+          // Rollback user creation
           await User.findByIdAndDelete(user._id);
           return res.status(400).json({ message: 'Restaurant Name, Address, and Cuisine Type are required for restaurants' });
         }
@@ -52,18 +60,69 @@ const registerUser = async (req, res) => {
         });
       }
 
+      // Send OTP via Nodemailer
+      await sendOTP(user.email, otpCode);
+
       res.status(201).json({
-        _id: user._id,
-        name: user.name,
+        message: 'Registration successful. Verification OTP sent to email.',
         email: user.email,
-        role: user.role,
-        phoneNumber: user.phoneNumber,
-        token: generateToken(user._id),
-        restaurantProfile: restaurantProfile
+        role: user.role
       });
     } else {
       res.status(400).json({ message: 'Invalid user data' });
     }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Verify OTP to activate account
+// @route   POST /api/auth/verify-otp
+// @access  Public
+const verifyOTP = async (req, res) => {
+  const { email, otp } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User account not found' });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({ message: 'This account is already verified' });
+    }
+
+    // Check OTP match
+    if (user.otpCode !== otp) {
+      return res.status(400).json({ message: 'Invalid OTP code. Please check your verification email.' });
+    }
+
+    // Check OTP expiry
+    if (new Date(user.otpExpiry) < new Date()) {
+      return res.status(400).json({ message: 'Verification OTP code has expired. Please register again.' });
+    }
+
+    // Mark as verified and clear OTP fields
+    user.isVerified = true;
+    user.otpCode = '';
+    user.otpExpiry = undefined;
+    await user.save();
+
+    let restaurantProfile = null;
+    if (user.role === 'restaurant') {
+      restaurantProfile = await RestaurantProfile.findOne({ user: user._id });
+    }
+
+    res.status(200).json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phoneNumber: user.phoneNumber,
+      token: generateToken(user._id),
+      restaurantProfile: restaurantProfile
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -79,8 +138,16 @@ const loginUser = async (req, res) => {
     const user = await User.findOne({ email });
 
     if (user && (await user.matchPassword(password))) {
-      let restaurantProfile = null;
+      // Check email verification status
+      if (!user.isVerified) {
+        return res.status(401).json({ 
+          message: 'Account email is unverified. Please verify your email first.',
+          email: user.email,
+          needsVerification: true
+        });
+      }
 
+      let restaurantProfile = null;
       if (user.role === 'restaurant') {
         restaurantProfile = await RestaurantProfile.findOne({ user: user._id });
       }
@@ -144,7 +211,7 @@ const updateUserProfile = async (req, res) => {
       user.phoneNumber = req.body.phoneNumber || user.phoneNumber;
 
       if (req.body.password) {
-        user.password = req.body.password; // Pre-save hook hashes it automatically
+        user.password = req.body.password;
       }
 
       const updatedUser = await user.save();
@@ -161,8 +228,7 @@ const updateUserProfile = async (req, res) => {
           profile.longitude = req.body.longitude || profile.longitude;
           
           if (req.file) {
-            updatedProfile = `/uploads/${req.file.filename}`;
-            profile.imagePath = updatedProfile;
+            profile.imagePath = `/uploads/${req.file.filename}`;
           }
 
           updatedProfile = await profile.save();
@@ -188,6 +254,7 @@ const updateUserProfile = async (req, res) => {
 
 module.exports = {
   registerUser,
+  verifyOTP,
   loginUser,
   getUserProfile,
   updateUserProfile

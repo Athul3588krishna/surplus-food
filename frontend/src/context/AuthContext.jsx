@@ -24,6 +24,15 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('userInfo', JSON.stringify(data));
       return { success: true };
     } catch (error) {
+      // Check if user is unverified and needs OTP entry
+      if (error.response?.status === 401 && error.response?.data?.needsVerification) {
+        return {
+          success: false,
+          needsVerification: true,
+          email: error.response.data.email,
+          message: error.response.data.message
+        };
+      }
       return {
         success: false,
         message: error.response?.data?.message || 'Login failed. Please check credentials.'
@@ -31,17 +40,30 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Registration handler
+  // Registration handler (triggers Nodemailer OTP email)
   const register = async (registrationData) => {
     try {
       const { data } = await api.post('/auth/register', registrationData);
+      return { success: true, email: data.email };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Registration failed. Please try again.'
+      };
+    }
+  };
+
+  // OTP Verification handler (completes activation and signs user in)
+  const verifyRegisterOTP = async (email, otp) => {
+    try {
+      const { data } = await api.post('/auth/verify-otp', { email, otp });
       setUser(data);
       localStorage.setItem('userInfo', JSON.stringify(data));
       return { success: true };
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Registration failed. Please try again.'
+        message: error.response?.data?.message || 'OTP verification failed. Please try again.'
       };
     }
   };
@@ -52,14 +74,14 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('userInfo');
   };
 
-  // Update profile handler (keeps memory state in sync with updated db data)
+  // Update profile handler
   const updateProfile = (updatedUserData) => {
     setUser(updatedUserData);
     localStorage.setItem('userInfo', JSON.stringify(updatedUserData));
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, updateProfile }}>
+    <AuthContext.Provider value={{ user, loading, login, register, verifyRegisterOTP, logout, updateProfile }}>
       {children}
     </AuthContext.Provider>
   );

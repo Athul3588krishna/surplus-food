@@ -2,6 +2,7 @@ const RestaurantProfile = require('../models/RestaurantProfile');
 const FoodItem = require('../models/FoodItem');
 const Order = require('../models/Order');
 const Review = require('../models/Review');
+const { sendCollectionToken } = require('../config/mailer');
 
 // @desc    Browse verified restaurants
 // @route   GET /api/customer/restaurants
@@ -96,6 +97,9 @@ const reserveFoodItem = async (req, res) => {
     }
     await foodItem.save();
 
+    // Generate 6-digit collection OTP code
+    const pickupToken = Math.floor(100000 + Math.random() * 900000).toString();
+
     // Create reservation order
     const totalPrice = foodItem.discountedPrice * qtyToReserve;
     const order = await Order.create({
@@ -104,8 +108,25 @@ const reserveFoodItem = async (req, res) => {
       foodItem: foodItem._id,
       quantity: qtyToReserve,
       totalPrice,
-      status: 'reserved'
+      status: 'reserved',
+      token: pickupToken,
+      paymentStatus: 'paid',
+      paymentDetails: {
+        transactionId: 'TXN-' + Math.floor(10000000 + Math.random() * 90000000),
+        cardLast4: req.body.cardLast4 || '4242'
+      }
     });
+
+    // Send collection token email asynchronously
+    sendCollectionToken(req.user.email, pickupToken, {
+      itemName: foodItem.name,
+      quantity: qtyToReserve,
+      totalPrice,
+      restaurantName: foodItem.restaurant.restaurantName,
+      pickupStartTime: foodItem.pickupStartTime,
+      pickupEndTime: foodItem.pickupEndTime,
+      address: foodItem.restaurant.address
+    }).catch(err => console.error('Failed to send collection email:', err));
 
     res.status(201).json(order);
   } catch (error) {

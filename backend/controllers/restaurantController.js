@@ -288,6 +288,49 @@ const getRestaurantAnalytics = async (req, res) => {
   }
 };
 
+// @desc    Verify customer collection token (OTP) and mark order as collected
+// @route   POST /api/restaurant/reservations/:id/verify
+// @access  Private (Restaurant only)
+const verifyReservationToken = async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    const profile = await getProfileOfUser(req.user._id);
+    if (!profile) {
+      return res.status(404).json({ message: 'Restaurant profile not found' });
+    }
+
+    const order = await Order.findById(req.params.id)
+      .populate('customer', 'name email phoneNumber')
+      .populate('foodItem', 'name originalPrice discountedPrice imagePath pickupStartTime pickupEndTime');
+
+    if (!order) {
+      return res.status(404).json({ message: 'Reservation not found' });
+    }
+
+    // Verify ownership
+    if (order.restaurant.toString() !== profile._id.toString()) {
+      return res.status(401).json({ message: 'Not authorized to manage this reservation' });
+    }
+
+    if (order.status !== 'reserved') {
+      return res.status(400).json({ message: `Reservation is already in ${order.status} status` });
+    }
+
+    // Verify token
+    if (order.token !== token) {
+      return res.status(400).json({ message: 'Invalid verification token. Please double-check the customer code.' });
+    }
+
+    order.status = 'collected';
+    const updatedOrder = await order.save();
+
+    res.json(updatedOrder);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   addFoodItem,
   getRestaurantFoodItems,
@@ -295,5 +338,6 @@ module.exports = {
   deleteFoodItem,
   getRestaurantReservations,
   updateReservationStatus,
-  getRestaurantAnalytics
+  getRestaurantAnalytics,
+  verifyReservationToken
 };

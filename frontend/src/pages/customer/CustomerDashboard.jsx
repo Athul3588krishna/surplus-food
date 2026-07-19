@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../../services/api';
-import { Search, SlidersHorizontal, MapPin, Clock, Save, ShoppingBag, Utensils, Star, Check } from 'lucide-react';
+import { Search, MapPin, Clock, ShoppingBag, Utensils, Star, Check, CreditCard, ShieldCheck } from 'lucide-react';
 
 const CustomerDashboard = () => {
   const [listings, setListings] = useState([]);
@@ -16,7 +16,14 @@ const CustomerDashboard = () => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [reserveQty, setReserveQty] = useState(1);
   const [reserveLoading, setReserveLoading] = useState(false);
-  const [reserveSuccess, setReserveSuccess] = useState(false);
+  const [checkoutStep, setCheckoutStep] = useState('details'); // details, payment, success
+  const [generatedToken, setGeneratedToken] = useState('');
+
+  // Mock card inputs
+  const [cardName, setCardName] = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
 
   const fetchListings = async () => {
     setLoading(true);
@@ -47,8 +54,18 @@ const CustomerDashboard = () => {
   const handleOpenReserve = (item) => {
     setSelectedItem(item);
     setReserveQty(1);
-    setReserveSuccess(false);
+    setCheckoutStep('details');
+    setGeneratedToken('');
+    setCardName('');
+    setCardNumber('');
+    setCardExpiry('');
+    setCardCvv('');
     setErrorMsg('');
+  };
+
+  const handleProceedToPayment = (e) => {
+    e.preventDefault();
+    setCheckoutStep('payment');
   };
 
   const handleReserveSubmit = async (e) => {
@@ -57,20 +74,50 @@ const CustomerDashboard = () => {
     setErrorMsg('');
 
     try {
-      await api.post('/customer/reservations', {
+      // Extract last 4 digits of simulated card
+      const last4 = cardNumber.replace(/\s/g, '').slice(-4) || '4242';
+
+      const { data } = await api.post('/customer/reservations', {
         foodItemId: selectedItem._id,
-        quantity: reserveQty
+        quantity: reserveQty,
+        cardLast4: last4
       });
-      setReserveSuccess(true);
-      setTimeout(() => {
-        setSelectedItem(null);
-        fetchListings(); // Refresh inventory
-      }, 1500);
+      
+      setGeneratedToken(data.token);
+      setCheckoutStep('success');
+      
+      // Refresh inventory behind modal
+      fetchListings();
     } catch (err) {
       setErrorMsg(err.response?.data?.message || 'Reservation failed. Please try again.');
     } finally {
       setReserveLoading(false);
     }
+  };
+
+  const formatCardNumber = (value) => {
+    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+    const matches = v.match(/\d{4,16}/g);
+    const match = (matches && matches[0]) || '';
+    const parts = [];
+
+    for (let i = 0, len = match.length; i < len; i += 4) {
+      parts.push(match.substring(i, i + 4));
+    }
+
+    if (parts.length > 0) {
+      return parts.join(' ');
+    } else {
+      return v;
+    }
+  };
+
+  const formatExpiry = (value) => {
+    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+    if (v.length >= 2) {
+      return `${v.slice(0, 2)}/${v.slice(2, 4)}`;
+    }
+    return v;
   };
 
   // Unique list of cuisines for filtering
@@ -215,43 +262,30 @@ const CustomerDashboard = () => {
         </div>
       )}
 
-      {/* Reservation Modal Overlay */}
+      {/* Reservation & Payment Modal Overlay */}
       {selectedItem && (
         <div className="modal-overlay">
-          <div className="modal-content">
+          <div className="modal-content" style={{ maxWidth: '480px' }}>
             <button className="modal-close" onClick={() => setSelectedItem(null)}>×</button>
             
-            <h3 style={{ fontSize: '1.5rem', marginBottom: '1.25rem', fontFamily: 'var(--font-display)' }}>Reserve Surplus Food</h3>
-            
-            {reserveSuccess ? (
-              <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
-                <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
-                  <Check className="text-emerald" size={28} />
-                </div>
-                <h4 className="text-emerald" style={{ marginBottom: '0.5rem' }}>Reservation Successful!</h4>
-                <p className="text-secondary" style={{ fontSize: '0.9rem' }}>Go to "My Reservations" to view pickup details.</p>
-              </div>
-            ) : (
-              <form onSubmit={handleReserveSubmit}>
+            {/* STEP 1: QUANTITY SELECTOR DETAILS */}
+            {checkoutStep === 'details' && (
+              <form onSubmit={handleProceedToPayment}>
+                <h3 style={{ fontSize: '1.4rem', marginBottom: '1.25rem', fontFamily: 'var(--font-display)' }}>Reserve Surplus Food</h3>
+                
                 <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
-                  <h4 style={{ fontSize: '1.1rem' }}>{selectedItem.name}</h4>
-                  <p className="text-emerald" style={{ fontWeight: 600, fontSize: '0.95rem', margin: '0.25rem 0' }}>{selectedItem.restaurant.restaurantName}</p>
-                  <p className="text-muted" style={{ fontSize: '0.85rem' }}>Pickup time: {selectedItem.pickupStartTime} - {selectedItem.pickupEndTime}</p>
+                  <h4 style={{ fontSize: '1.05rem' }}>{selectedItem.name}</h4>
+                  <p className="text-emerald" style={{ fontWeight: 600, fontSize: '0.9rem', margin: '0.25rem 0' }}>{selectedItem.restaurant.restaurantName}</p>
+                  <p className="text-muted" style={{ fontSize: '0.8rem' }}>Pickup: {selectedItem.pickupStartTime} - {selectedItem.pickupEndTime}</p>
                   
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', fontSize: '0.95rem', fontWeight: 600 }}>
-                    <span>Discounted Price:</span>
-                    <span className="text-emerald">${selectedItem.discountedPrice.toFixed(2)} each</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', fontSize: '0.9rem', fontWeight: 600 }}>
+                    <span>Price per item:</span>
+                    <span className="text-emerald">${selectedItem.discountedPrice.toFixed(2)}</span>
                   </div>
                 </div>
-
-                {errorMsg && (
-                  <div className="badge badge-danger" style={{ width: '100%', padding: '0.75rem', marginBottom: '1rem', textTransform: 'none', display: 'block', textAlign: 'center' }}>
-                    {errorMsg}
-                  </div>
-                )}
 
                 <div className="form-group">
-                  <label className="form-label">Quantity to Reserve</label>
+                  <label className="form-label">Select Quantity</label>
                   <select 
                     className="form-control" 
                     value={reserveQty} 
@@ -263,22 +297,146 @@ const CustomerDashboard = () => {
                   </select>
                 </div>
 
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1rem' }}>
+                  <div>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Subtotal:</p>
+                    <p style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                      ${(selectedItem.discountedPrice * reserveQty).toFixed(2)}
+                    </p>
+                  </div>
+                  <button type="submit" className="btn btn-primary btn-sm">
+                    Proceed to Payment
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* STEP 2: CREDIT CARD PAYMENT SIMULATION */}
+            {checkoutStep === 'payment' && (
+              <form onSubmit={handleReserveSubmit}>
+                <h3 style={{ fontSize: '1.4rem', marginBottom: '1.25rem', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <CreditCard className="text-emerald" /> Simulated Checkout
+                </h3>
+
+                {errorMsg && (
+                  <div className="badge badge-danger" style={{ width: '100%', padding: '0.75rem', marginBottom: '1rem', textTransform: 'none', display: 'block', textAlign: 'center' }}>
+                    {errorMsg}
+                  </div>
+                )}
+
+                <div style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #311042 100%)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '1.25rem', marginBottom: '1.5rem', color: '#fff', boxShadow: '0 8px 16px rgba(0,0,0,0.3)' }}>
+                  <p style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.6)', letterSpacing: '0.05em' }}>MOCK CARD SIMULATION</p>
+                  <div style={{ fontSize: '1.25rem', letterSpacing: '2px', fontWeight: 'bold', margin: '1rem 0' }}>
+                    {cardNumber ? cardNumber : '•••• •••• •••• ••••'}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'rgba(255,255,255,0.8)' }}>
+                    <span>{cardName ? cardName.toUpperCase() : 'CARDHOLDER NAME'}</span>
+                    <span>{cardExpiry ? cardExpiry : 'MM/YY'}</span>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Cardholder Name</label>
+                  <input 
+                    type="text" 
+                    required 
+                    placeholder="e.g. John Doe"
+                    className="form-control"
+                    value={cardName}
+                    onChange={(e) => setCardName(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Card Number</label>
+                  <input 
+                    type="text" 
+                    required 
+                    maxLength="19"
+                    placeholder="4242 4242 4242 4242"
+                    className="form-control"
+                    value={cardNumber}
+                    onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div className="form-group">
+                    <label className="form-label">Expiry (MM/YY)</label>
+                    <input 
+                      type="text" 
+                      required 
+                      maxLength="5"
+                      placeholder="12/29"
+                      className="form-control"
+                      value={cardExpiry}
+                      onChange={(e) => setCardExpiry(formatExpiry(e.target.value))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">CVV / CVN</label>
+                    <input 
+                      type="password" 
+                      required 
+                      maxLength="3"
+                      placeholder="•••"
+                      className="form-control"
+                      value={cardCvv}
+                      onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, ''))}
+                    />
+                  </div>
+                </div>
+
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1rem' }}>
                   <div>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Total Cost (Pay at Store):</p>
-                    <p style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Total Cost:</p>
+                    <p style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                       ${(selectedItem.discountedPrice * reserveQty).toFixed(2)}
                     </p>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '0.75rem' }}>
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setSelectedItem(null)}>Cancel</button>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setCheckoutStep('details')}>Back</button>
                     <button type="submit" className="btn btn-primary btn-sm" disabled={reserveLoading}>
-                      {reserveLoading ? 'Reserving...' : 'Confirm'}
+                      {reserveLoading ? 'Simulating...' : 'Simulate Pay'}
                     </button>
                   </div>
                 </div>
               </form>
+            )}
+
+            {/* STEP 3: MOCK PAYMENT & OTP TOKEN GENERATION SUCCESS */}
+            {checkoutStep === 'success' && (
+              <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+                <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: 'var(--color-primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto' }}>
+                  <ShieldCheck className="text-emerald" size={32} />
+                </div>
+                
+                <h3 className="text-emerald" style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', marginBottom: '0.5rem' }}>Simulated Payment Approved!</h3>
+                <p className="text-secondary" style={{ fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                  Your reservation is confirmed. Give this OTP token to the hotel to collect your food:
+                </p>
+
+                {/* Big Verification Token Code */}
+                <div style={{ margin: '1.5rem 0', padding: '1rem 0', background: 'rgba(16, 185, 129, 0.1)', border: '1px dashed var(--color-primary)', borderRadius: '12px' }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', letterSpacing: '1px', marginBottom: '0.25rem' }}>COLLECTION TOKEN (OTP)</p>
+                  <span style={{ fontSize: '2.5rem', fontWeight: 800, letterSpacing: '4px', color: 'var(--text-primary)' }}>
+                    {generatedToken ? `${generatedToken.slice(0, 3)} ${generatedToken.slice(3, 6)}` : '000 000'}
+                  </span>
+                </div>
+
+                <div className="badge badge-success" style={{ width: '100%', borderRadius: 'var(--border-radius-sm)', padding: '0.6rem', marginBottom: '1.5rem', textTransform: 'none', display: 'block' }}>
+                  Token code emailed via Nodemailer!
+                </div>
+
+                <button 
+                  type="button" 
+                  className="btn btn-primary btn-block" 
+                  onClick={() => setSelectedItem(null)}
+                >
+                  Done
+                </button>
+              </div>
             )}
 
           </div>

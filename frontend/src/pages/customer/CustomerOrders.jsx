@@ -32,7 +32,7 @@ const CustomerOrders = () => {
   }, []);
 
   const handleCancelOrder = async (orderId) => {
-    if (!window.confirm('Are you sure you want to cancel this reservation?')) return;
+    if (!window.confirm('Are you sure you want to cancel this reservation? The payment status will be updated.')) return;
     
     setErrorMsg('');
     try {
@@ -115,7 +115,7 @@ const CustomerOrders = () => {
                   <div key={order._id} className="glass-panel" style={{ padding: '1.5rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
                       <div>
-                        <span className="badge badge-warning" style={{ marginBottom: '0.5rem' }}>Reserved</span>
+                        <span className="badge badge-success" style={{ marginBottom: '0.5rem' }}>PAID & RESERVED</span>
                         <h3 style={{ fontSize: '1.15rem' }}>{order.foodItem.name}</h3>
                         <p className="text-emerald" style={{ fontWeight: 600, fontSize: '0.9rem', margin: '0.25rem 0' }}>{order.restaurant.restaurantName}</p>
                       </div>
@@ -125,7 +125,15 @@ const CustomerOrders = () => {
                       </div>
                     </div>
 
-                    <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: 'var(--border-radius-sm)', border: '1px solid var(--glass-border)', margin: '1rem 0 1.25rem 0', fontSize: '0.85rem' }}>
+                    {/* Prominent Collection Token Box */}
+                    <div style={{ margin: '1rem 0', padding: '0.75rem', background: 'rgba(16, 185, 129, 0.08)', border: '1px dashed rgba(16, 185, 129, 0.4)', borderRadius: 'var(--border-radius-sm)', textAlign: 'center' }}>
+                      <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', letterSpacing: '0.05em', margin: 0, fontWeight: 600 }}>COLLECTION TOKEN (OTP)</p>
+                      <p style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '4px', margin: '0.2rem 0 0 0' }}>
+                        {order.token ? `${order.token.slice(0, 3)} ${order.token.slice(3, 6)}` : '000 000'}
+                      </p>
+                    </div>
+
+                    <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: 'var(--border-radius-sm)', border: '1px solid var(--glass-border)', marginBottom: '1.25rem', fontSize: '0.85rem' }}>
                       <p style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.4rem' }} className="text-secondary">
                         <strong>Pickup Window:</strong> {order.foodItem.pickupStartTime} - {order.foodItem.pickupEndTime}
                       </p>
@@ -133,19 +141,20 @@ const CustomerOrders = () => {
                         <strong>Store Address:</strong> {order.restaurant.address}
                       </p>
                       <p style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.4rem' }} className="text-muted">
-                        <strong>Reservation ID:</strong> {order._id.substring(order._id.length - 8).toUpperCase()}
+                        <strong>Receipt ID:</strong> {order.paymentDetails?.transactionId || order._id.substring(order._id.length - 8).toUpperCase()}
                       </p>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <p style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }} className="text-amber">
-                        <AlertTriangle size={14} /> Pay at restaurant upon collection.
+                      <p style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }} className="text-emerald">
+                        <Check size={14} /> Paid via card (last 4: {order.paymentDetails?.cardLast4 || '4242'}).
                       </p>
                       <button 
                         onClick={() => handleCancelOrder(order._id)}
                         className="btn btn-danger btn-sm"
+                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
                       >
-                        Cancel
+                        Cancel & Refund
                       </button>
                     </div>
                   </div>
@@ -243,7 +252,7 @@ const CustomerOrders = () => {
                 <div className="form-group">
                   <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Rating Score</span>
-                    <span className="text-amber" style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', fontWeight: 600 }}>
+                    <span className="text-amber" style={{ display: 'flex', alignItems: 'center', gap: '0.2, fontWeight: 600' }}>
                       <Star size={14} fill="currentColor" /> {rating} / 5
                     </span>
                   </label>
@@ -266,7 +275,7 @@ const CustomerOrders = () => {
                 <div className="form-group">
                   <label className="form-label">Review Comment (Optional)</label>
                   <textarea 
-                    placeholder="Share your experience (food quality, collection process, friendliness)..." 
+                    placeholder="Share your experience..." 
                     className="form-control" 
                     rows="3"
                     style={{ fontFamily: 'var(--font-body)', resize: 'none' }}

@@ -1,11 +1,17 @@
 import { useState, useEffect } from 'react';
 import api from '../../services/api';
-import { ClipboardCheck, User, Phone, ShoppingBag, Calendar, Check, X, AlertCircle } from 'lucide-react';
+import { ClipboardCheck, Phone, Check, X, ShieldCheck, Ticket } from 'lucide-react';
 
 const RestaurantReservations = () => {
   const [reservations, setReservations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Token Verification Modal states
+  const [verifyingOrder, setVerifyingOrder] = useState(null);
+  const [tokenInput, setTokenInput] = useState('');
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [verifySuccess, setVerifySuccess] = useState(false);
 
   const fetchReservations = async () => {
     setLoading(true);
@@ -24,16 +30,41 @@ const RestaurantReservations = () => {
     fetchReservations();
   }, []);
 
-  const handleUpdateStatus = async (reservationId, newStatus) => {
-    const confirmationText = newStatus === 'collected' 
-      ? 'Confirm that the customer has collected and paid for this item?' 
-      : 'Cancel this reservation and release the items back to inventory?';
-      
-    if (!window.confirm(confirmationText)) return;
+  const handleOpenVerifyModal = (order) => {
+    setVerifyingOrder(order);
+    setTokenInput('');
+    setVerifySuccess(false);
+    setErrorMsg('');
+  };
 
+  const handleVerifyTokenSubmit = async (e) => {
+    e.preventDefault();
+    setVerifyLoading(true);
+    setErrorMsg('');
+
+    try {
+      await api.post(`/restaurant/reservations/${verifyingOrder._id}/verify`, {
+        token: tokenInput.replace(/\s/g, '') // remove spaces
+      });
+
+      setVerifySuccess(true);
+      setTimeout(() => {
+        setVerifyingOrder(null);
+        fetchReservations(); // Refresh list to reflect collected status
+      }, 1500);
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || 'Verification failed. Please verify the code.');
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  const handleCancelOrder = async (reservationId) => {
+    if (!window.confirm('Cancel this reservation and release the items back to inventory?')) return;
+    
     setErrorMsg('');
     try {
-      await api.put(`/restaurant/reservations/${reservationId}`, { status: newStatus });
+      await api.put(`/restaurant/reservations/${reservationId}`, { status: 'cancelled' });
       fetchReservations(); // Refresh list
     } catch (err) {
       setErrorMsg(err.response?.data?.message || 'Status update failed');
@@ -43,7 +74,7 @@ const RestaurantReservations = () => {
   const getStatusBadge = (status) => {
     switch (status) {
       case 'reserved':
-        return <span className="badge badge-warning">Reserved</span>;
+        return <span className="badge badge-warning">Reserved (Paid)</span>;
       case 'collected':
         return <span className="badge badge-success">Collected</span>;
       case 'cancelled':
@@ -58,10 +89,10 @@ const RestaurantReservations = () => {
       
       <header style={{ marginBottom: '2.5rem' }}>
         <h1 style={{ fontSize: '2.2rem', marginBottom: '0.5rem' }}>Customer Reservations</h1>
-        <p className="text-secondary">Verify customer IDs, process payments upon collection, and track listing allocations.</p>
+        <p className="text-secondary">Verify customer collection OTP codes, claim reservation payouts, and track pickup history.</p>
       </header>
 
-      {errorMsg && (
+      {errorMsg && !verifyingOrder && (
         <div className="badge badge-danger" style={{ width: '100%', padding: '1rem', marginBottom: '2rem', display: 'block', textTransform: 'none', textAlign: 'center' }}>
           {errorMsg}
         </div>
@@ -85,7 +116,7 @@ const RestaurantReservations = () => {
                 <th>Customer Contact</th>
                 <th>Surplus Item</th>
                 <th>Quantity</th>
-                <th>Price Due</th>
+                <th>Price Paid</th>
                 <th>Status</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
@@ -96,7 +127,7 @@ const RestaurantReservations = () => {
                   {/* Receipt Code & Date */}
                   <td>
                     <div style={{ fontWeight: 600 }} className="text-indigo">
-                      #{res._id.substring(res._id.length - 8).toUpperCase()}
+                      #{res.paymentDetails?.transactionId || res._id.substring(res._id.length - 8).toUpperCase()}
                     </div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
                       {new Date(res.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
@@ -137,18 +168,18 @@ const RestaurantReservations = () => {
                     {res.status === 'reserved' ? (
                       <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                         <button 
-                          onClick={() => handleUpdateStatus(res._id, 'collected')}
+                          onClick={() => handleOpenVerifyModal(res)}
                           className="btn btn-primary btn-sm"
                           style={{ padding: '0.35rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.8rem' }}
-                          title="Mark as Collected"
+                          title="Verify Code"
                         >
-                          <Check size={12} /> Collect
+                          <Ticket size={12} /> Claim Food
                         </button>
                         <button 
-                          onClick={() => handleUpdateStatus(res._id, 'cancelled')}
+                          onClick={() => handleCancelOrder(res._id)}
                           className="btn btn-secondary btn-sm"
                           style={{ padding: '0.35rem 0.5rem', display: 'flex', alignItems: 'center', color: 'var(--color-danger)', borderColor: 'rgba(239, 68, 68, 0.2)' }}
-                          title="Cancel Reservation"
+                          title="Cancel Booking & Refund"
                         >
                           <X size={12} />
                         </button>
@@ -165,6 +196,66 @@ const RestaurantReservations = () => {
           </table>
         </div>
       )}
+
+      {/* Claim / Verify Token Modal Overlay */}
+      {verifyingOrder && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '400px' }}>
+            <button className="modal-close" onClick={() => setVerifyingOrder(null)}>×</button>
+            
+            <h3 style={{ fontSize: '1.4rem', marginBottom: '1.25rem', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Ticket className="text-emerald" /> Claim Food Order
+            </h3>
+
+            {verifySuccess ? (
+              <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+                <div style={{ width: '55px', height: '55px', borderRadius: '50%', background: 'var(--color-primary-glow)', display: 'flex', alignItems: 'center', justify: 'center', margin: '0 auto 1rem auto' }}>
+                  <ShieldCheck className="text-emerald" size={28} />
+                </div>
+                <h4 className="text-emerald" style={{ marginBottom: '0.5rem' }}>Token Verified!</h4>
+                <p className="text-secondary" style={{ fontSize: '0.9rem' }}>The food order has been successfully claimed and marked as collected.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleVerifyTokenSubmit}>
+                <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+                  <p><strong>Item:</strong> {verifyingOrder.foodItem?.name}</p>
+                  <p><strong>Qty:</strong> {verifyingOrder.quantity} | <strong>Amount:</strong> ${verifyingOrder.totalPrice.toFixed(2)}</p>
+                  <p className="text-secondary" style={{ fontSize: '0.8rem', marginTop: '0.4rem' }}><strong>Customer:</strong> {verifyingOrder.customer?.name}</p>
+                </div>
+
+                {errorMsg && (
+                  <div className="badge badge-danger" style={{ width: '100%', padding: '0.75rem', marginBottom: '1rem', textTransform: 'none', display: 'block', textAlign: 'center' }}>
+                    {errorMsg}
+                  </div>
+                )}
+
+                <div className="form-group">
+                  <label className="form-label" style={{ textAlign: 'center', display: 'block' }}>Enter Customer Collection OTP</label>
+                  <input 
+                    type="text" 
+                    maxLength="6"
+                    required
+                    placeholder="000 000"
+                    className="form-control"
+                    style={{ textAlign: 'center', fontSize: '1.5rem', letterSpacing: '4px', fontWeight: 'bold', width: '100%' }}
+                    value={tokenInput}
+                    onChange={(e) => setTokenInput(e.target.value.replace(/\D/g, ''))} // digits only
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem', justifyContent: 'flex-end' }}>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setVerifyingOrder(null)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={verifyLoading}>
+                    {verifyLoading ? 'Verifying...' : 'Verify OTP'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

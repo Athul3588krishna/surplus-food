@@ -31,6 +31,19 @@ const orderSchema = new mongoose.Schema({
     enum: ['reserved', 'collected', 'cancelled'],
     default: 'reserved'
   },
+  token: {
+    type: String,
+    required: true
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['pending', 'paid', 'refunded'],
+    default: 'paid'
+  },
+  paymentDetails: {
+    transactionId: String,
+    cardLast4: String
+  },
   createdAt: {
     type: Date,
     default: Date.now

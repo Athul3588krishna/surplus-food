@@ -7,7 +7,8 @@ const {
   deleteFoodItem,
   getRestaurantReservations,
   updateReservationStatus,
-  getRestaurantAnalytics
+  getRestaurantAnalytics,
+  verifyReservationToken
 } = require('../controllers/restaurantController');
 const { protect, verifyRole } = require('../middleware/authMiddleware');
 const upload = require('../middleware/uploadMiddleware');
@@ -26,6 +27,7 @@ router.route('/listings/:id')
 
 router.get('/reservations', getRestaurantReservations);
 router.put('/reservations/:id', updateReservationStatus);
+router.post('/reservations/:id/verify', verifyReservationToken);
 router.get('/analytics', getRestaurantAnalytics);
 
 module.exports = router;
