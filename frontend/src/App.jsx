@@ -1,4 +1,5 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Navbar from './components/Navbar';
@@ -22,9 +23,24 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import RestaurantVerification from './pages/admin/RestaurantVerification';
 import SystemListings from './pages/admin/SystemListings';
 
+// Redirect global #admin hash to /auth#admin
+function HashRedirect() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (location.hash === '#admin' && location.pathname !== '/auth') {
+      navigate('/auth#admin');
+    }
+  }, [location.hash, location.pathname, navigate]);
+
+  return null;
+}
+
 function App() {
   return (
     <Router>
+      <HashRedirect />
       <AuthProvider>
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
           <Navbar />

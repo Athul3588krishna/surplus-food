@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { KeyRound, Mail, User as UserIcon, Phone, Store, MapPin, UtensilsCrossed, FileText, CheckCircle } from 'lucide-react';
 
@@ -7,6 +7,7 @@ const AuthPage = () => {
   const { login, register, verifyRegisterOTP, user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   
   // Tab states
   const [isLogin, setIsLogin] = useState(true);
@@ -43,6 +44,15 @@ const AuthPage = () => {
     }
     setNeedsOtpVerify(false);
   }, [searchParams]);
+
+  // Auto-fill admin credentials if #admin hash is in the URL
+  useEffect(() => {
+    if (location.hash === '#admin') {
+      setIsLogin(true);
+      setEmail('admin@surplus.com');
+      setPassword('admin123');
+    }
+  }, [location.hash]);
 
   // If already logged in, redirect
   useEffect(() => {
