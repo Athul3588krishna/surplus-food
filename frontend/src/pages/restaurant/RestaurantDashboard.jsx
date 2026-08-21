@@ -21,7 +21,11 @@ const RestaurantDashboard = () => {
   const [quantity, setQuantity] = useState('');
   const [pickupStartTime, setPickupStartTime] = useState('18:00');
   const [pickupEndTime, setPickupEndTime] = useState('21:00');
+  const [dietaryType, setDietaryType] = useState('veg');
+  const [allergens, setAllergens] = useState([]);
   const [imageFile, setImageFile] = useState(null);
+
+  const availableAllergens = ['Gluten-Free', 'Dairy-Free', 'Nut-Free', 'Halal'];
 
   const fetchData = async () => {
     setLoading(true);
@@ -53,6 +57,8 @@ const RestaurantDashboard = () => {
     setQuantity('');
     setPickupStartTime('18:00');
     setPickupEndTime('21:00');
+    setDietaryType('veg');
+    setAllergens([]);
     setImageFile(null);
     setErrorMsg('');
     setShowModal(true);
@@ -67,9 +73,19 @@ const RestaurantDashboard = () => {
     setQuantity(item.quantity || '');
     setPickupStartTime(item.pickupStartTime || '18:00');
     setPickupEndTime(item.pickupEndTime || '21:00');
+    setDietaryType(item.dietaryType || 'veg');
+    setAllergens(item.allergens || []);
     setImageFile(null);
     setErrorMsg('');
     setShowModal(true);
+  };
+
+  const handleAllergenToggle = (tag) => {
+    if (allergens.includes(tag)) {
+      setAllergens(allergens.filter((t) => t !== tag));
+    } else {
+      setAllergens([...allergens, tag]);
+    }
   };
 
   const handleFileChange = (e) => {
@@ -90,6 +106,8 @@ const RestaurantDashboard = () => {
     formData.append('quantity', quantity);
     formData.append('pickupStartTime', pickupStartTime);
     formData.append('pickupEndTime', pickupEndTime);
+    formData.append('dietaryType', dietaryType);
+    formData.append('allergens', JSON.stringify(allergens));
     if (imageFile) {
       formData.append('image', imageFile);
     }
@@ -255,6 +273,16 @@ const RestaurantDashboard = () => {
                     <p><strong>Offer Price:</strong> <span className="text-emerald" style={{ fontWeight: 600 }}>${item.discountedPrice.toFixed(2)}</span></p>
                     <p><strong>In Stock:</strong> {item.quantity} bags</p>
                     <p><strong>Pickup window:</strong> {item.pickupStartTime} - {item.pickupEndTime}</p>
+                    <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
+                      <span className={`badge ${item.dietaryType === 'veg' ? 'badge-success' : item.dietaryType === 'vegan' ? 'badge-info' : 'badge-warning'}`} style={{ fontSize: '0.65rem' }}>
+                        {item.dietaryType === 'veg' ? '🟢 Veg' : item.dietaryType === 'vegan' ? '🌱 Vegan' : '🔴 Non-Veg'}
+                      </span>
+                      {item.allergens && item.allergens.map((tag) => (
+                        <span key={tag} className="badge badge-secondary" style={{ fontSize: '0.6rem', background: 'rgba(255,255,255,0.06)' }}>
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -321,6 +349,46 @@ const RestaurantDashboard = () => {
                   value={description} 
                   onChange={(e) => setDescription(e.target.value)} 
                 />
+              </div>
+
+              {/* Dietary Category */}
+              <div className="form-group">
+                <label className="form-label">Dietary Preference</label>
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                    <input type="radio" name="dietaryType" value="veg" checked={dietaryType === 'veg'} onChange={(e) => setDietaryType(e.target.value)} />
+                    🟢 Vegetarian
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                    <input type="radio" name="dietaryType" value="non-veg" checked={dietaryType === 'non-veg'} onChange={(e) => setDietaryType(e.target.value)} />
+                    🔴 Non-Veg
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                    <input type="radio" name="dietaryType" value="vegan" checked={dietaryType === 'vegan'} onChange={(e) => setDietaryType(e.target.value)} />
+                    🌱 Vegan
+                  </label>
+                </div>
+              </div>
+
+              {/* Allergen & Dietary Tags */}
+              <div className="form-group">
+                <label className="form-label">Allergen & Dietary Tags</label>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {availableAllergens.map((tag) => {
+                    const isSelected = allergens.includes(tag);
+                    return (
+                      <button
+                        type="button"
+                        key={tag}
+                        onClick={() => handleAllergenToggle(tag)}
+                        className={`btn btn-sm ${isSelected ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem' }}
+                      >
+                        {isSelected ? '✓ ' : '+ '} {tag}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }} className="form-price-qty-row">

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../../services/api';
-import { ClipboardCheck, Phone, Check, X, ShieldCheck, Ticket } from 'lucide-react';
+import { ClipboardCheck, Phone, Check, X, ShieldCheck, Ticket, QrCode, Camera } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
 
 const RestaurantReservations = () => {
   const [reservations, setReservations] = useState([]);
@@ -12,6 +13,16 @@ const RestaurantReservations = () => {
   const [tokenInput, setTokenInput] = useState('');
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [verifySuccess, setVerifySuccess] = useState(false);
+
+  // QR Scanner Modal states
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [manualQrInput, setManualQrInput] = useState('');
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanResult, setScanResult] = useState(null);
+  const [scanError, setScanError] = useState('');
+
+  const html5QrCodeRef = useRef(null);
 
   const fetchReservations = async () => {
     setLoading(true);
@@ -29,6 +40,89 @@ const RestaurantReservations = () => {
   useEffect(() => {
     fetchReservations();
   }, []);
+
+  // Handle QR Camera Scanner initialization & cleanup
+  useEffect(() => {
+    if (scannerOpen && !scanResult) {
+      const qrRegionId = 'qr-reader-container';
+      const html5QrCode = new Html5Qrcode(qrRegionId);
+      html5QrCodeRef.current = html5QrCode;
+
+      const config = { fps: 10, qrbox: { width: 220, height: 220 } };
+
+      html5QrCode.start(
+        { facingMode: 'environment' },
+        config,
+        async (decodedText) => {
+          // Successfully scanned QR text
+          try {
+            await html5QrCode.stop();
+            setCameraActive(false);
+          } catch (e) {
+            console.error('Error stopping scanner:', e);
+          }
+          handleVerifyQRData(decodedText);
+        },
+        () => {
+          // Scan frame tick, ignore error
+        }
+      ).then(() => {
+        setCameraActive(true);
+        setScanError('');
+      }).catch((err) => {
+        console.warn('Unable to start camera scanner:', err);
+        setCameraActive(false);
+        setScanError('Camera not accessible or permission denied. You can manually enter/paste the QR payload or OTP code below.');
+      });
+
+      return () => {
+        if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+          html5QrCodeRef.current.stop().catch(err => console.error('Cleanup stop error:', err));
+        }
+      };
+    }
+  }, [scannerOpen, scanResult]);
+
+  const closeScannerModal = async () => {
+    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+      try {
+        await html5QrCodeRef.current.stop();
+      } catch (e) {
+        console.error('Stop scanner error:', e);
+      }
+    }
+    setScannerOpen(false);
+    setScanResult(null);
+    setScanError('');
+    setManualQrInput('');
+    setCameraActive(false);
+  };
+
+  const handleVerifyQRData = async (qrDataString) => {
+    if (!qrDataString || !qrDataString.trim()) return;
+
+    setScanLoading(true);
+    setScanError('');
+    setScanResult(null);
+
+    try {
+      const { data } = await api.post('/restaurant/reservations/scan-qr', {
+        qrData: qrDataString.trim()
+      });
+
+      setScanResult(data.order);
+      fetchReservations(); // Refresh list immediately
+    } catch (err) {
+      setScanError(err.response?.data?.message || 'Failed to verify QR Code. Please ensure the code is valid and unpaid/uncollected.');
+    } finally {
+      setScanLoading(false);
+    }
+  };
+
+  const handleManualQrSubmit = (e) => {
+    e.preventDefault();
+    handleVerifyQRData(manualQrInput);
+  };
 
   const handleOpenVerifyModal = (order) => {
     setVerifyingOrder(order);
@@ -87,12 +181,22 @@ const RestaurantReservations = () => {
   return (
     <div className="container animate-fade-in" style={{ paddingTop: '2.5rem', paddingBottom: '4rem' }}>
       
-      <header style={{ marginBottom: '2.5rem' }}>
-        <h1 style={{ fontSize: '2.2rem', marginBottom: '0.5rem' }}>Customer Reservations</h1>
-        <p className="text-secondary">Verify customer collection OTP codes, claim reservation payouts, and track pickup history.</p>
+      <header style={{ marginBottom: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <h1 style={{ fontSize: '2.2rem', marginBottom: '0.5rem' }}>Customer Reservations</h1>
+          <p className="text-secondary">Scan customer QR codes, verify OTP collection tokens, and complete food pickups.</p>
+        </div>
+
+        <button 
+          onClick={() => { setScanResult(null); setScanError(''); setScannerOpen(true); }}
+          className="btn btn-primary"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem', fontSize: '1rem', fontWeight: 600 }}
+        >
+          <QrCode size={20} /> Scan Customer QR
+        </button>
       </header>
 
-      {errorMsg && !verifyingOrder && (
+      {errorMsg && !verifyingOrder && !scannerOpen && (
         <div className="badge badge-danger" style={{ width: '100%', padding: '1rem', marginBottom: '2rem', display: 'block', textTransform: 'none', textAlign: 'center' }}>
           {errorMsg}
         </div>
@@ -194,6 +298,97 @@ const RestaurantReservations = () => {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* QR Camera Scanner Modal Overlay */}
+      {scannerOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '440px' }}>
+            <button className="modal-close" onClick={closeScannerModal}>×</button>
+
+            <h3 style={{ fontSize: '1.4rem', marginBottom: '0.25rem', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Camera className="text-emerald" size={22} /> Scan Customer QR Code
+            </h3>
+            <p className="text-secondary" style={{ fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+              Align the customer's QR code within the camera frame below to automatically complete their order pickup.
+            </p>
+
+            {scanResult ? (
+              <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+                <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: 'var(--color-primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
+                  <ShieldCheck className="text-emerald" size={32} />
+                </div>
+                <h4 className="text-emerald" style={{ marginBottom: '0.25rem', fontSize: '1.2rem' }}>Order Verified & Completed!</h4>
+                
+                <div className="glass-panel" style={{ padding: '1rem', margin: '1rem 0', textAlign: 'left', fontSize: '0.9rem' }}>
+                  <p><strong>Item:</strong> {scanResult.foodItem?.name || 'Surplus Item'}</p>
+                  <p><strong>Customer:</strong> {scanResult.customer?.name || 'Customer'}</p>
+                  <p><strong>Quantity:</strong> {scanResult.quantity} | <strong>Paid:</strong> ${scanResult.totalPrice?.toFixed(2)}</p>
+                  <p style={{ marginTop: '0.4rem' }}>
+                    <span className="badge badge-success">COLLECTED</span>
+                  </p>
+                </div>
+
+                <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => setScanResult(null)}>
+                  Scan Another Code
+                </button>
+              </div>
+            ) : (
+              <div>
+                {/* Camera Scanner Viewport */}
+                <div 
+                  id="qr-reader-container" 
+                  style={{ 
+                    width: '100%', 
+                    borderRadius: '12px', 
+                    overflow: 'hidden', 
+                    background: '#000', 
+                    minHeight: '250px',
+                    border: '2px solid var(--color-primary)'
+                  }}
+                />
+
+                {scanLoading && (
+                  <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--color-primary)', fontWeight: 600 }}>
+                    Verifying scanned QR code...
+                  </div>
+                )}
+
+                {scanError && (
+                  <div className="badge badge-danger" style={{ width: '100%', padding: '0.75rem', margin: '1rem 0', textTransform: 'none', display: 'block', textAlign: 'center', fontSize: '0.85rem' }}>
+                    {scanError}
+                  </div>
+                )}
+
+                {/* Manual fallback input */}
+                <form onSubmit={handleManualQrSubmit} style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--glass-border)' }}>
+                  <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '0.3rem', color: 'var(--text-secondary)' }}>
+                    Manual Code / Scanned Text Entry
+                  </label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      placeholder="Paste QR payload or OTP token" 
+                      value={manualQrInput} 
+                      onChange={(e) => setManualQrInput(e.target.value)}
+                      style={{ fontSize: '0.85rem' }}
+                    />
+                    <button type="submit" className="btn btn-secondary btn-sm" disabled={scanLoading || !manualQrInput.trim()}>
+                      Submit
+                    </button>
+                  </div>
+                </form>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={closeScannerModal}>
+                    Close Scanner
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

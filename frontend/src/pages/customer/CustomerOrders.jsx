@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { generateReceiptPDF } from '../../utils/receiptGenerator';
-import { ClipboardList, Clock, Star, Check } from 'lucide-react';
+import { ClipboardList, Clock, Star, Check, QrCode } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 
 const CustomerOrders = () => {
   const { user } = useAuth();
@@ -16,6 +17,9 @@ const CustomerOrders = () => {
   const [comment, setComment] = useState('');
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewSuccess, setReviewSuccess] = useState(false);
+
+  // QR Modal state
+  const [qrModalOrder, setQrModalOrder] = useState(null);
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -88,7 +92,7 @@ const CustomerOrders = () => {
         <p className="text-secondary">Track your active bookings, view pickup locations, and see your collection history.</p>
       </header>
 
-      {errorMsg && !selectedOrder && (
+      {errorMsg && !selectedOrder && !qrModalOrder && (
         <div className="badge badge-danger" style={{ width: '100%', padding: '1rem', marginBottom: '2rem', display: 'block', textTransform: 'none', textAlign: 'center' }}>
           {errorMsg}
         </div>
@@ -114,64 +118,107 @@ const CustomerOrders = () => {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                {activeReservations.map((order) => (
-                  <div key={order._id} className="glass-panel" style={{ padding: '1.5rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      <div>
-                        <span className="badge badge-success" style={{ marginBottom: '0.5rem' }}>PAID & RESERVED</span>
-                        <h3 style={{ fontSize: '1.15rem' }}>{order.foodItem.name}</h3>
-                        <p className="text-emerald" style={{ fontWeight: 600, fontSize: '0.9rem', margin: '0.25rem 0' }}>{order.restaurant.restaurantName}</p>
+                {activeReservations.map((order) => {
+                  const qrPayload = JSON.stringify({ orderId: order._id, token: order.token });
+                  return (
+                    <div key={order._id} className="glass-panel" style={{ padding: '1.5rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <div>
+                          <span className="badge badge-success" style={{ marginBottom: '0.5rem' }}>PAID & RESERVED</span>
+                          <h3 style={{ fontSize: '1.15rem' }}>{order.foodItem.name}</h3>
+                          <p className="text-emerald" style={{ fontWeight: 600, fontSize: '0.9rem', margin: '0.25rem 0' }}>{order.restaurant.restaurantName}</p>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <p style={{ fontSize: '1.25rem', fontWeight: 800 }}>${order.totalPrice.toFixed(2)}</p>
+                          <p className="text-muted" style={{ fontSize: '0.8rem' }}>Qty: {order.quantity}</p>
+                        </div>
                       </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <p style={{ fontSize: '1.25rem', fontWeight: 800 }}>${order.totalPrice.toFixed(2)}</p>
-                        <p className="text-muted" style={{ fontSize: '0.8rem' }}>Qty: {order.quantity}</p>
-                      </div>
-                    </div>
 
-                    {/* Prominent Collection Token Box */}
-                    <div style={{ margin: '1rem 0', padding: '0.75rem', background: 'rgba(16, 185, 129, 0.08)', border: '1px dashed rgba(16, 185, 129, 0.4)', borderRadius: 'var(--border-radius-sm)', textAlign: 'center' }}>
-                      <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', letterSpacing: '0.05em', margin: 0, fontWeight: 600 }}>COLLECTION TOKEN (OTP)</p>
-                      <p style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '4px', margin: '0.2rem 0 0 0' }}>
-                        {order.token ? `${order.token.slice(0, 3)} ${order.token.slice(3, 6)}` : '000 000'}
-                      </p>
-                    </div>
+                      {/* Prominent Collection QR & Token Box */}
+                      <div 
+                        style={{ 
+                          margin: '1rem 0', 
+                          padding: '1rem', 
+                          background: 'rgba(16, 185, 129, 0.06)', 
+                          border: '1px dashed rgba(16, 185, 129, 0.4)', 
+                          borderRadius: 'var(--border-radius-sm)', 
+                          display: 'flex',
+                          alignItems: 'center',
+                          justify: 'space-between',
+                          gap: '1rem'
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', letterSpacing: '0.05em', margin: 0, fontWeight: 600 }}>COLLECTION TOKEN (OTP)</p>
+                          <p style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '3px', margin: '0.1rem 0 0.5rem 0' }}>
+                            {order.token ? `${order.token.slice(0, 3)} ${order.token.slice(3, 6)}` : '000 000'}
+                          </p>
+                          <button 
+                            onClick={() => setQrModalOrder(order)}
+                            className="btn btn-primary btn-sm"
+                            style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                          >
+                            <QrCode size={14} /> Full Screen QR
+                          </button>
+                        </div>
 
-                    <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: 'var(--border-radius-sm)', border: '1px solid var(--glass-border)', marginBottom: '1.25rem', fontSize: '0.85rem' }}>
-                      <p style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.4rem' }} className="text-secondary">
-                        <strong>Pickup Window:</strong> {order.foodItem.pickupStartTime} - {order.foodItem.pickupEndTime}
-                      </p>
-                      <p style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }} className="text-secondary">
-                        <strong>Store Address:</strong> {order.restaurant.address}
-                      </p>
-                      <p style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.4rem' }} className="text-muted">
-                        <strong>Receipt ID:</strong> {order.paymentDetails?.transactionId || order._id.substring(order._id.length - 8).toUpperCase()}
-                      </p>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      <p style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }} className="text-emerald">
-                        <Check size={14} /> Paid via card (last 4: {order.paymentDetails?.cardLast4 || '4242'}).
-                      </p>
-                      
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button 
-                          onClick={() => generateReceiptPDF(order, user?.name)}
-                          className="btn btn-secondary btn-sm"
-                          style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                        {/* Interactive mini QR preview */}
+                        <div 
+                          onClick={() => setQrModalOrder(order)} 
+                          style={{ 
+                            background: '#ffffff', 
+                            padding: '8px', 
+                            borderRadius: '8px', 
+                            cursor: 'pointer',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                          }}
+                          title="Click to expand QR Code"
                         >
-                          Download PDF
-                        </button>
-                        <button 
-                          onClick={() => handleCancelOrder(order._id)}
-                          className="btn btn-danger btn-sm"
-                          style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
-                        >
-                          Cancel
-                        </button>
+                          <QRCodeSVG value={qrPayload} size={72} level="H" />
+                          <span style={{ fontSize: '0.6rem', color: '#1f2937', fontWeight: 700, marginTop: '2px' }}>TAP TO EXPAND</span>
+                        </div>
+                      </div>
+
+                      <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: 'var(--border-radius-sm)', border: '1px solid var(--glass-border)', marginBottom: '1.25rem', fontSize: '0.85rem' }}>
+                        <p style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.4rem' }} className="text-secondary">
+                          <strong>Pickup Window:</strong> {order.foodItem.pickupStartTime} - {order.foodItem.pickupEndTime}
+                        </p>
+                        <p style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }} className="text-secondary">
+                          <strong>Store Address:</strong> {order.restaurant.address}
+                        </p>
+                        <p style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.4rem' }} className="text-muted">
+                          <strong>Receipt ID:</strong> {order.paymentDetails?.transactionId || order._id.substring(order._id.length - 8).toUpperCase()}
+                        </p>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <p style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }} className="text-emerald">
+                          <Check size={14} /> Paid via card (last 4: {order.paymentDetails?.cardLast4 || '4242'}).
+                        </p>
+                        
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button 
+                            onClick={() => generateReceiptPDF(order, user?.name)}
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                          >
+                            Download PDF
+                          </button>
+                          <button 
+                            onClick={() => handleCancelOrder(order._id)}
+                            className="btn btn-danger btn-sm"
+                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -238,6 +285,55 @@ const CustomerOrders = () => {
             )}
           </div>
 
+        </div>
+      )}
+
+      {/* QR Code Fullscreen Modal */}
+      {qrModalOrder && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '420px', textAlign: 'center' }}>
+            <button className="modal-close" onClick={() => setQrModalOrder(null)}>×</button>
+            
+            <h3 style={{ fontSize: '1.4rem', marginBottom: '0.25rem', fontFamily: 'var(--font-display)' }}>Order Collection QR</h3>
+            <p className="text-secondary" style={{ fontSize: '0.85rem', marginBottom: '1.25rem' }}>Show this QR code to the restaurant staff to claim your order.</p>
+
+            <div 
+              style={{ 
+                background: '#ffffff', 
+                padding: '1.25rem', 
+                borderRadius: '16px', 
+                display: 'inline-block', 
+                margin: '0 auto 1rem auto',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.15)'
+              }}
+            >
+              <QRCodeSVG 
+                value={JSON.stringify({ orderId: qrModalOrder._id, token: qrModalOrder.token })} 
+                size={220} 
+                level="H" 
+                includeMargin={true}
+              />
+            </div>
+
+            <div className="glass-panel" style={{ padding: '0.85rem', margin: '0.5rem 0 1rem 0', fontSize: '0.9rem' }}>
+              <p style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--color-primary)' }}>{qrModalOrder.foodItem?.name}</p>
+              <p className="text-secondary" style={{ fontSize: '0.85rem' }}>{qrModalOrder.restaurant?.restaurantName}</p>
+              <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-around' }}>
+                <div>
+                  <span className="text-muted" style={{ fontSize: '0.7rem', display: 'block' }}>OTP CODE</span>
+                  <span style={{ fontWeight: 800, fontSize: '1.2rem', letterSpacing: '2px' }}>{qrModalOrder.token}</span>
+                </div>
+                <div>
+                  <span className="text-muted" style={{ fontSize: '0.7rem', display: 'block' }}>PICKUP WINDOW</span>
+                  <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{qrModalOrder.foodItem?.pickupStartTime} - {qrModalOrder.foodItem?.pickupEndTime}</span>
+                </div>
+              </div>
+            </div>
+
+            <button className="btn btn-secondary btn-sm" style={{ width: '100%' }} onClick={() => setQrModalOrder(null)}>
+              Close QR Code
+            </button>
+          </div>
         </div>
       )}
 
@@ -331,3 +427,4 @@ const CustomerOrders = () => {
 };
 
 export default CustomerOrders;
+

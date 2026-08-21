@@ -1,11 +1,12 @@
 import { jsPDF } from 'jspdf';
+import QRCode from 'qrcode';
 
 /**
  * Generates and downloads a beautiful, print-ready client-side PDF receipt for a reservation.
  * @param {Object} order - The populated order object containing foodItem and restaurant details.
  * @param {string} customerName - Fallback customer name in case order.customer isn't populated.
  */
-export const generateReceiptPDF = (order, customerName = 'EcoBite Customer') => {
+export const generateReceiptPDF = async (order, customerName = 'EcoBite Customer') => {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -102,36 +103,45 @@ export const generateReceiptPDF = (order, customerName = 'EcoBite Customer') => 
   // Line Divider
   doc.line(15, 101, 133, 101);
 
-  // 5. Verification Token Dash-Box
+  // 5. Verification Token & QR Box
   doc.setFillColor(249, 250, 251); // gray background
-  doc.roundedRect(15, 107, 118, 22, 2, 2, 'F');
+  doc.roundedRect(15, 106, 118, 28, 2, 2, 'F');
   doc.setDrawColor(16, 185, 129); // Emerald border
   doc.setLineDashPattern([1.5, 1.5], 0); // dotted line
-  doc.rect(15, 107, 118, 22);
+  doc.rect(15, 106, 118, 28);
   doc.setLineDashPattern([], 0); // reset line
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
   doc.setTextColor(100, 116, 139);
-  doc.text('CUSTOMER COLLECTION OTP TOKEN (CLAIM ID)', 74, 112, { align: 'center' });
+  doc.text('COLLECTION OTP TOKEN & ORDER QR', 55, 111, { align: 'center' });
 
   const tokenStr = order.token || '000000';
   const formattedToken = `${tokenStr.slice(0, 3)} ${tokenStr.slice(3, 6)}`;
-  doc.setFontSize(15);
+  doc.setFontSize(14);
   doc.setTextColor(31, 41, 55);
-  doc.text(formattedToken, 74, 121, { align: 'center', charSpace: 3 });
+  doc.text(formattedToken, 55, 120, { align: 'center', charSpace: 2 });
+
+  // Generate QR Code Image onto PDF
+  try {
+    const qrPayload = JSON.stringify({ orderId: order._id, token: order.token });
+    const qrDataUrl = await QRCode.toDataURL(qrPayload, { margin: 1, width: 180 });
+    doc.addImage(qrDataUrl, 'PNG', 104, 108, 24, 24);
+  } catch (err) {
+    console.error('Failed to draw QR code on receipt PDF:', err);
+  }
 
   // 6. Warnings and Instructions
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(239, 68, 68); // Red warnings
   const windowStr = `PICKUP WINDOW: ${order.foodItem?.pickupStartTime || '18:00'} - ${order.foodItem?.pickupEndTime || '21:00'}`;
-  doc.text(windowStr, 74, 136, { align: 'center' });
+  doc.text(windowStr, 74, 140, { align: 'center' });
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(107, 114, 128);
-  doc.text('Please collect during the specified window. Present this token code to claim food.', 74, 141, { align: 'center' });
+  doc.text('Please collect during the specified window. Show this QR code or OTP to claim food.', 74, 145, { align: 'center' });
 
   // Save/Download Action
   doc.save(`EcoBite-Receipt-${receiptCode}.pdf`);

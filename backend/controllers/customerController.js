@@ -22,7 +22,7 @@ const getRestaurants = async (req, res) => {
 // @route   GET /api/customer/listings
 // @access  Private (Customer only)
 const getFoodListings = async (req, res) => {
-  const { search, cuisine, maxPrice } = req.query;
+  const { search, cuisine, maxPrice, dietaryType, allergen } = req.query;
 
   try {
     // 1. Find all verified restaurants
@@ -48,6 +48,14 @@ const getFoodListings = async (req, res) => {
 
     if (search) {
       foodFilter.name = { $regex: search, $options: 'i' };
+    }
+
+    if (dietaryType && dietaryType !== 'all') {
+      foodFilter.dietaryType = dietaryType;
+    }
+
+    if (allergen && allergen !== 'all') {
+      foodFilter.allergens = allergen;
     }
 
     const listings = await FoodItem.find(foodFilter)

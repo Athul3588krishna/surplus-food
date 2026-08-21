@@ -50,6 +50,15 @@ const foodItemSchema = new mongoose.Schema({
     type: Date,
     required: true
   },
+  dietaryType: {
+    type: String,
+    enum: ['veg', 'non-veg', 'vegan'],
+    default: 'veg'
+  },
+  allergens: {
+    type: [String],
+    default: []
+  },
   createdAt: {
     type: Date,
     default: Date.now

@@ -8,7 +8,8 @@ const {
   getRestaurantReservations,
   updateReservationStatus,
   getRestaurantAnalytics,
-  verifyReservationToken
+  verifyReservationToken,
+  scanAndVerifyQRCode
 } = require('../controllers/restaurantController');
 const { protect, verifyRole } = require('../middleware/authMiddleware');
 const upload = require('../middleware/uploadMiddleware');
@@ -28,6 +29,7 @@ router.route('/listings/:id')
 router.get('/reservations', getRestaurantReservations);
 router.put('/reservations/:id', updateReservationStatus);
 router.post('/reservations/:id/verify', verifyReservationToken);
+router.post('/reservations/scan-qr', scanAndVerifyQRCode);
 router.get('/analytics', getRestaurantAnalytics);
 
 module.exports = router;

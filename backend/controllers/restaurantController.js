@@ -11,7 +11,7 @@ const getProfileOfUser = async (userId) => {
 // @route   POST /api/restaurant/listings
 // @access  Private (Restaurant only)
 const addFoodItem = async (req, res) => {
-  const { name, description, originalPrice, discountedPrice, quantity, pickupStartTime, pickupEndTime } = req.body;
+  const { name, description, originalPrice, discountedPrice, quantity, pickupStartTime, pickupEndTime, dietaryType, allergens } = req.body;
 
   try {
     const profile = await getProfileOfUser(req.user._id);
@@ -37,6 +37,19 @@ const addFoodItem = async (req, res) => {
       imagePath = `/uploads/${req.file.filename}`;
     }
 
+    let parsedAllergens = [];
+    if (allergens) {
+      if (Array.isArray(allergens)) {
+        parsedAllergens = allergens;
+      } else if (typeof allergens === 'string') {
+        try {
+          parsedAllergens = JSON.parse(allergens);
+        } catch (e) {
+          parsedAllergens = allergens.split(',').map(s => s.trim()).filter(Boolean);
+        }
+      }
+    }
+
     const foodItem = await FoodItem.create({
       restaurant: profile._id,
       name,
@@ -48,6 +61,8 @@ const addFoodItem = async (req, res) => {
       pickupEndTime,
       imagePath,
       expiryDate,
+      dietaryType: dietaryType || 'veg',
+      allergens: parsedAllergens,
       status: Number(quantity) > 0 ? 'available' : 'sold-out'
     });
 
@@ -78,7 +93,7 @@ const getRestaurantFoodItems = async (req, res) => {
 // @route   PUT /api/restaurant/listings/:id
 // @access  Private (Restaurant only)
 const updateFoodItem = async (req, res) => {
-  const { name, description, originalPrice, discountedPrice, quantity, pickupStartTime, pickupEndTime, status } = req.body;
+  const { name, description, originalPrice, discountedPrice, quantity, pickupStartTime, pickupEndTime, status, dietaryType, allergens } = req.body;
 
   try {
     const profile = await getProfileOfUser(req.user._id);
@@ -103,6 +118,20 @@ const updateFoodItem = async (req, res) => {
     foodItem.quantity = quantity !== undefined ? Number(quantity) : foodItem.quantity;
     foodItem.pickupStartTime = pickupStartTime || foodItem.pickupStartTime;
     foodItem.pickupEndTime = pickupEndTime || foodItem.pickupEndTime;
+    if (dietaryType) {
+      foodItem.dietaryType = dietaryType;
+    }
+    if (allergens !== undefined) {
+      if (Array.isArray(allergens)) {
+        foodItem.allergens = allergens;
+      } else if (typeof allergens === 'string') {
+        try {
+          foodItem.allergens = JSON.parse(allergens);
+        } catch (e) {
+          foodItem.allergens = allergens.split(',').map(s => s.trim()).filter(Boolean);
+        }
+      }
+    }
     
     // Recalculate status based on quantity
     if (foodItem.quantity <= 0) {
@@ -331,6 +360,83 @@ const verifyReservationToken = async (req, res) => {
   }
 };
 
+// @desc    Scan and verify customer QR code payload to mark order as collected
+// @route   POST /api/restaurant/reservations/scan-qr
+// @access  Private (Restaurant only)
+const scanAndVerifyQRCode = async (req, res) => {
+  const { qrData, orderId, token } = req.body;
+
+  try {
+    const profile = await getProfileOfUser(req.user._id);
+    if (!profile) {
+      return res.status(404).json({ message: 'Restaurant profile not found' });
+    }
+
+    let parsedOrderId = orderId;
+    let parsedToken = token;
+
+    if (qrData) {
+      let data = qrData;
+      if (typeof qrData === 'string') {
+        try {
+          data = JSON.parse(qrData);
+        } catch (e) {
+          if (qrData.startsWith('ORDER:')) {
+            const parts = qrData.split(':');
+            parsedOrderId = parts[1];
+            parsedToken = parts[2];
+          } else {
+            parsedToken = qrData.trim();
+          }
+        }
+      }
+      if (data && typeof data === 'object') {
+        if (data.orderId) parsedOrderId = data.orderId;
+        if (data.token) parsedToken = data.token;
+      }
+    }
+
+    let order = null;
+    if (parsedOrderId) {
+      order = await Order.findById(parsedOrderId)
+        .populate('customer', 'name email phoneNumber')
+        .populate('foodItem', 'name originalPrice discountedPrice imagePath pickupStartTime pickupEndTime');
+    } else if (parsedToken) {
+      order = await Order.findOne({ token: parsedToken, restaurant: profile._id, status: 'reserved' })
+        .populate('customer', 'name email phoneNumber')
+        .populate('foodItem', 'name originalPrice discountedPrice imagePath pickupStartTime pickupEndTime');
+    }
+
+    if (!order) {
+      return res.status(404).json({ message: 'Reservation not found for scanned QR code or OTP token.' });
+    }
+
+    // Verify ownership
+    if (order.restaurant.toString() !== profile._id.toString()) {
+      return res.status(401).json({ message: 'Not authorized: This reservation belongs to another restaurant.' });
+    }
+
+    if (order.status !== 'reserved') {
+      return res.status(400).json({ message: `Reservation is already in ${order.status} status.` });
+    }
+
+    // Verify token if parsedToken was provided
+    if (parsedToken && order.token !== parsedToken) {
+      return res.status(400).json({ message: 'Invalid verification token in QR code.' });
+    }
+
+    order.status = 'collected';
+    const updatedOrder = await order.save();
+
+    res.json({
+      message: 'Order verified and collected successfully!',
+      order: updatedOrder
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   addFoodItem,
   getRestaurantFoodItems,
@@ -339,5 +445,6 @@ module.exports = {
   getRestaurantReservations,
   updateReservationStatus,
   getRestaurantAnalytics,
-  verifyReservationToken
+  verifyReservationToken,
+  scanAndVerifyQRCode
 };

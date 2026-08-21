@@ -15,6 +15,8 @@ const CustomerDashboard = () => {
   const [search, setSearch] = useState('');
   const [cuisine, setCuisine] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
+  const [dietaryType, setDietaryType] = useState('all');
+  const [selectedAllergen, setSelectedAllergen] = useState('all');
 
   // Modal Reservation states
   const [selectedItem, setSelectedItem] = useState(null);
@@ -38,6 +40,8 @@ const CustomerDashboard = () => {
       if (search) params.search = search;
       if (cuisine) params.cuisine = cuisine;
       if (maxPrice) params.maxPrice = maxPrice;
+      if (dietaryType && dietaryType !== 'all') params.dietaryType = dietaryType;
+      if (selectedAllergen && selectedAllergen !== 'all') params.allergen = selectedAllergen;
 
       const { data } = await api.get('/customer/listings', { params });
       setListings(data);
@@ -54,7 +58,7 @@ const CustomerDashboard = () => {
     }, 400);
 
     return () => clearTimeout(delayDebounce);
-  }, [search, cuisine, maxPrice]);
+  }, [search, cuisine, maxPrice, dietaryType, selectedAllergen]);
 
   const handleOpenReserve = (item) => {
     setSelectedItem(item);
@@ -165,7 +169,7 @@ const CustomerDashboard = () => {
 
       {/* Search and Filters Bar */}
       <section className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2.5rem' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '1rem', flexWrap: 'wrap' }} className="filters-grid">
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }} className="filters-grid">
           
           {/* Search */}
           <div style={{ position: 'relative' }}>
@@ -206,6 +210,48 @@ const CustomerDashboard = () => {
               onChange={(e) => setMaxPrice(e.target.value)}
               min="0"
             />
+          </div>
+
+        </div>
+
+        {/* Dietary & Allergen Quick Filter Buttons */}
+        <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+          
+          {/* Dietary Type Radio Pills */}
+          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, marginRight: '0.2rem' }}>Diet:</span>
+            {[
+              { id: 'all', label: 'All' },
+              { id: 'veg', label: '🟢 Veg' },
+              { id: 'non-veg', label: '🔴 Non-Veg' },
+              { id: 'vegan', label: '🌱 Vegan' }
+            ].map((type) => (
+              <button
+                key={type.id}
+                type="button"
+                onClick={() => setDietaryType(type.id)}
+                className={`btn btn-sm ${dietaryType === type.id ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: '0.75rem', padding: '0.25rem 0.65rem' }}
+              >
+                {type.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Allergen Tag Selector */}
+          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, marginRight: '0.2rem' }}>Allergen / Special:</span>
+            {['all', 'Gluten-Free', 'Dairy-Free', 'Nut-Free', 'Halal'].map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => setSelectedAllergen(tag)}
+                className={`btn btn-sm ${selectedAllergen === tag ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: '0.75rem', padding: '0.25rem 0.65rem' }}
+              >
+                {tag === 'all' ? 'Any' : tag}
+              </button>
+            ))}
           </div>
 
         </div>
@@ -270,6 +316,16 @@ const CustomerDashboard = () => {
                     <p style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }} className="text-secondary">
                       <Clock size={12} /> Pickup: {item.pickupStartTime} - {item.pickupEndTime}
                     </p>
+                    <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
+                      <span className={`badge ${item.dietaryType === 'veg' ? 'badge-success' : item.dietaryType === 'vegan' ? 'badge-info' : 'badge-warning'}`} style={{ fontSize: '0.65rem' }}>
+                        {item.dietaryType === 'veg' ? '🟢 Veg' : item.dietaryType === 'vegan' ? '🌱 Vegan' : '🔴 Non-Veg'}
+                      </span>
+                      {item.allergens && item.allergens.map((tag) => (
+                        <span key={tag} className="badge badge-secondary" style={{ fontSize: '0.6rem', background: 'rgba(255,255,255,0.06)' }}>
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
