@@ -59,6 +59,14 @@ const foodItemSchema = new mongoose.Schema({
     type: [String],
     default: []
   },
+  isSurpriseBag: {
+    type: Boolean,
+    default: false
+  },
+  estimatedValue: {
+    type: Number,
+    default: 0
+  },
   createdAt: {
     type: Date,
     default: Date.now

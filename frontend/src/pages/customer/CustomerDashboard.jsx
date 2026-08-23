@@ -17,6 +17,7 @@ const CustomerDashboard = () => {
   const [maxPrice, setMaxPrice] = useState('');
   const [dietaryType, setDietaryType] = useState('all');
   const [selectedAllergen, setSelectedAllergen] = useState('all');
+  const [isSurpriseBagOnly, setIsSurpriseBagOnly] = useState(false);
 
   // Modal Reservation states
   const [selectedItem, setSelectedItem] = useState(null);
@@ -42,6 +43,7 @@ const CustomerDashboard = () => {
       if (maxPrice) params.maxPrice = maxPrice;
       if (dietaryType && dietaryType !== 'all') params.dietaryType = dietaryType;
       if (selectedAllergen && selectedAllergen !== 'all') params.allergen = selectedAllergen;
+      if (isSurpriseBagOnly) params.isSurpriseBag = true;
 
       const { data } = await api.get('/customer/listings', { params });
       setListings(data);
@@ -58,7 +60,7 @@ const CustomerDashboard = () => {
     }, 400);
 
     return () => clearTimeout(delayDebounce);
-  }, [search, cuisine, maxPrice, dietaryType, selectedAllergen]);
+  }, [search, cuisine, maxPrice, dietaryType, selectedAllergen, isSurpriseBagOnly]);
 
   const handleOpenReserve = (item) => {
     setSelectedItem(item);
@@ -238,20 +240,38 @@ const CustomerDashboard = () => {
             ))}
           </div>
 
-          {/* Allergen Tag Selector */}
-          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, marginRight: '0.2rem' }}>Allergen / Special:</span>
-            {['all', 'Gluten-Free', 'Dairy-Free', 'Nut-Free', 'Halal'].map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => setSelectedAllergen(tag)}
-                className={`btn btn-sm ${selectedAllergen === tag ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ fontSize: '0.75rem', padding: '0.25rem 0.65rem' }}
-              >
-                {tag === 'all' ? 'Any' : tag}
-              </button>
-            ))}
+          {/* Surprise Bags Filter Toggle & Allergen Tag Selector */}
+          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setIsSurpriseBagOnly(!isSurpriseBagOnly)}
+              className={`btn btn-sm ${isSurpriseBagOnly ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ 
+                fontSize: '0.75rem', 
+                padding: '0.25rem 0.75rem',
+                background: isSurpriseBagOnly ? 'linear-gradient(135deg, #ec4899, #8b5cf6)' : 'rgba(236, 72, 153, 0.1)',
+                color: isSurpriseBagOnly ? '#fff' : '#f472b6',
+                border: '1px solid rgba(236, 72, 153, 0.3)',
+                fontWeight: 600
+              }}
+            >
+              🎁 Surprise Bags Only
+            </button>
+
+            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, marginRight: '0.2rem' }}>Allergen:</span>
+              {['all', 'Gluten-Free', 'Dairy-Free', 'Nut-Free', 'Halal'].map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => setSelectedAllergen(tag)}
+                  className={`btn btn-sm ${selectedAllergen === tag ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ fontSize: '0.75rem', padding: '0.25rem 0.65rem' }}
+                >
+                  {tag === 'all' ? 'Any' : tag}
+                </button>
+              ))}
+            </div>
           </div>
 
         </div>
@@ -282,12 +302,22 @@ const CustomerDashboard = () => {
             const savingsPercent = Math.round((savings / item.originalPrice) * 100);
             
             return (
-              <div key={item._id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <div 
+                key={item._id} 
+                className="glass-card" 
+                style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  height: '100%',
+                  border: item.isSurpriseBag ? '1px solid rgba(236, 72, 153, 0.4)' : '1px solid var(--glass-border)',
+                  boxShadow: item.isSurpriseBag ? '0 4px 20px rgba(236, 72, 153, 0.12)' : 'none'
+                }}
+              >
                 {/* Image or Placeholder */}
                 {item.imagePath ? (
                   <img src={`http://localhost:5000${item.imagePath}`} alt={item.name} className="card-img" />
                 ) : (
-                  <div className="card-img-placeholder">
+                  <div className="card-img-placeholder" style={{ background: item.isSurpriseBag ? 'linear-gradient(135deg, rgba(236, 72, 153, 0.15), rgba(139, 92, 246, 0.15))' : '' }}>
                     <Utensils size={32} />
                   </div>
                 )}
@@ -317,6 +347,11 @@ const CustomerDashboard = () => {
                       <Clock size={12} /> Pickup: {item.pickupStartTime} - {item.pickupEndTime}
                     </p>
                     <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
+                      {item.isSurpriseBag && (
+                        <span className="badge" style={{ fontSize: '0.65rem', background: 'linear-gradient(135deg, #ec4899, #8b5cf6)', color: '#fff', fontWeight: 700 }}>
+                          🎁 MYSTERY BAG
+                        </span>
+                      )}
                       <span className={`badge ${item.dietaryType === 'veg' ? 'badge-success' : item.dietaryType === 'vegan' ? 'badge-info' : 'badge-warning'}`} style={{ fontSize: '0.65rem' }}>
                         {item.dietaryType === 'veg' ? '🟢 Veg' : item.dietaryType === 'vegan' ? '🌱 Vegan' : '🔴 Non-Veg'}
                       </span>
@@ -333,7 +368,9 @@ const CustomerDashboard = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--glass-border)', paddingTop: '1rem', marginTop: 'auto' }}>
                   <div>
                     <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)' }}>${item.discountedPrice.toFixed(2)}</span>
-                    <span style={{ textDecoration: 'line-through', fontSize: '0.85rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>${item.originalPrice.toFixed(2)}</span>
+                    <span style={{ textDecoration: 'line-through', fontSize: '0.85rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
+                      ${(item.estimatedValue || item.originalPrice).toFixed(2)}
+                    </span>
                   </div>
 
                   <button 

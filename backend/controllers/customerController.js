@@ -22,7 +22,7 @@ const getRestaurants = async (req, res) => {
 // @route   GET /api/customer/listings
 // @access  Private (Customer only)
 const getFoodListings = async (req, res) => {
-  const { search, cuisine, maxPrice, dietaryType, allergen } = req.query;
+  const { search, cuisine, maxPrice, dietaryType, allergen, isSurpriseBag } = req.query;
 
   try {
     // 1. Find all verified restaurants
@@ -56,6 +56,10 @@ const getFoodListings = async (req, res) => {
 
     if (allergen && allergen !== 'all') {
       foodFilter.allergens = allergen;
+    }
+
+    if (isSurpriseBag === 'true' || isSurpriseBag === true) {
+      foodFilter.isSurpriseBag = true;
     }
 
     const listings = await FoodItem.find(foodFilter)

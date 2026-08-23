@@ -23,6 +23,8 @@ const RestaurantDashboard = () => {
   const [pickupEndTime, setPickupEndTime] = useState('21:00');
   const [dietaryType, setDietaryType] = useState('veg');
   const [allergens, setAllergens] = useState([]);
+  const [isSurpriseBag, setIsSurpriseBag] = useState(false);
+  const [estimatedValue, setEstimatedValue] = useState('');
   const [imageFile, setImageFile] = useState(null);
 
   const availableAllergens = ['Gluten-Free', 'Dairy-Free', 'Nut-Free', 'Halal'];
@@ -59,6 +61,8 @@ const RestaurantDashboard = () => {
     setPickupEndTime('21:00');
     setDietaryType('veg');
     setAllergens([]);
+    setIsSurpriseBag(false);
+    setEstimatedValue('');
     setImageFile(null);
     setErrorMsg('');
     setShowModal(true);
@@ -75,9 +79,23 @@ const RestaurantDashboard = () => {
     setPickupEndTime(item.pickupEndTime || '21:00');
     setDietaryType(item.dietaryType || 'veg');
     setAllergens(item.allergens || []);
+    setIsSurpriseBag(item.isSurpriseBag || false);
+    setEstimatedValue(item.estimatedValue || item.originalPrice || '');
     setImageFile(null);
     setErrorMsg('');
     setShowModal(true);
+  };
+
+  const handleSurpriseBagToggle = (e) => {
+    const checked = e.target.checked;
+    setIsSurpriseBag(checked);
+    if (checked) {
+      if (!name) setName('Daily Surplus Mystery Bag 🎁');
+      if (!description) setDescription('A surprise assortment of delicious daily surplus items valued at $15 for just $4.99!');
+      if (!originalPrice) setOriginalPrice('15.00');
+      if (!discountedPrice) setDiscountedPrice('4.99');
+      if (!estimatedValue) setEstimatedValue('15.00');
+    }
   };
 
   const handleAllergenToggle = (tag) => {
@@ -108,6 +126,8 @@ const RestaurantDashboard = () => {
     formData.append('pickupEndTime', pickupEndTime);
     formData.append('dietaryType', dietaryType);
     formData.append('allergens', JSON.stringify(allergens));
+    formData.append('isSurpriseBag', isSurpriseBag);
+    formData.append('estimatedValue', estimatedValue || originalPrice);
     if (imageFile) {
       formData.append('image', imageFile);
     }
@@ -274,6 +294,11 @@ const RestaurantDashboard = () => {
                     <p><strong>In Stock:</strong> {item.quantity} bags</p>
                     <p><strong>Pickup window:</strong> {item.pickupStartTime} - {item.pickupEndTime}</p>
                     <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
+                      {item.isSurpriseBag && (
+                        <span className="badge" style={{ fontSize: '0.65rem', background: 'linear-gradient(135deg, #ec4899, #8b5cf6)', color: '#fff', fontWeight: 700 }}>
+                          🎁 MYSTERY BAG
+                        </span>
+                      )}
                       <span className={`badge ${item.dietaryType === 'veg' ? 'badge-success' : item.dietaryType === 'vegan' ? 'badge-info' : 'badge-warning'}`} style={{ fontSize: '0.65rem' }}>
                         {item.dietaryType === 'veg' ? '🟢 Veg' : item.dietaryType === 'vegan' ? '🌱 Vegan' : '🔴 Non-Veg'}
                       </span>
@@ -327,12 +352,37 @@ const RestaurantDashboard = () => {
             )}
 
             <form onSubmit={handleModalSubmit}>
+              {/* Surprise Bag / Mystery Box Toggle */}
+              <div 
+                style={{ 
+                  background: 'rgba(236, 72, 153, 0.08)', 
+                  border: '1px border-radius var(--border-radius-sm)', 
+                  borderLeft: '4px solid #ec4899', 
+                  padding: '0.85rem 1rem', 
+                  marginBottom: '1.25rem',
+                  borderRadius: '8px'
+                }}
+              >
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', color: '#f472b6' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={isSurpriseBag} 
+                    onChange={handleSurpriseBagToggle}
+                    style={{ width: '16px', height: '16px', accentColor: '#ec4899' }}
+                  />
+                  🎁 Mark as Surprise Bag / Mystery Box (Too Good To Go Style)
+                </label>
+                <p className="text-secondary" style={{ fontSize: '0.78rem', margin: '0.25rem 0 0 1.6rem' }}>
+                  Select if exact contents are unknown ahead of time. Customers get a surprise mix worth an estimated retail value!
+                </p>
+              </div>
+
               <div className="form-group">
-                <label className="form-label">Food Title / Name</label>
+                <label className="form-label">{isSurpriseBag ? 'Surprise Bag Title' : 'Food Title / Name'}</label>
                 <input 
                   type="text" 
                   required 
-                  placeholder="e.g. Sourdough Loaf Mix, Croissant Box" 
+                  placeholder={isSurpriseBag ? "e.g. Evening Bakery Surprise Bag 🎁" : "e.g. Sourdough Loaf Mix, Croissant Box"} 
                   className="form-control"
                   value={name} 
                   onChange={(e) => setName(e.target.value)} 

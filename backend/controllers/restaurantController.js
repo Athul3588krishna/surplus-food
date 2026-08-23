@@ -11,7 +11,7 @@ const getProfileOfUser = async (userId) => {
 // @route   POST /api/restaurant/listings
 // @access  Private (Restaurant only)
 const addFoodItem = async (req, res) => {
-  const { name, description, originalPrice, discountedPrice, quantity, pickupStartTime, pickupEndTime, dietaryType, allergens } = req.body;
+  const { name, description, originalPrice, discountedPrice, quantity, pickupStartTime, pickupEndTime, dietaryType, allergens, isSurpriseBag, estimatedValue } = req.body;
 
   try {
     const profile = await getProfileOfUser(req.user._id);
@@ -63,6 +63,8 @@ const addFoodItem = async (req, res) => {
       expiryDate,
       dietaryType: dietaryType || 'veg',
       allergens: parsedAllergens,
+      isSurpriseBag: isSurpriseBag === true || isSurpriseBag === 'true',
+      estimatedValue: estimatedValue ? Number(estimatedValue) : Number(originalPrice),
       status: Number(quantity) > 0 ? 'available' : 'sold-out'
     });
 
@@ -93,7 +95,7 @@ const getRestaurantFoodItems = async (req, res) => {
 // @route   PUT /api/restaurant/listings/:id
 // @access  Private (Restaurant only)
 const updateFoodItem = async (req, res) => {
-  const { name, description, originalPrice, discountedPrice, quantity, pickupStartTime, pickupEndTime, status, dietaryType, allergens } = req.body;
+  const { name, description, originalPrice, discountedPrice, quantity, pickupStartTime, pickupEndTime, status, dietaryType, allergens, isSurpriseBag, estimatedValue } = req.body;
 
   try {
     const profile = await getProfileOfUser(req.user._id);
@@ -131,6 +133,12 @@ const updateFoodItem = async (req, res) => {
           foodItem.allergens = allergens.split(',').map(s => s.trim()).filter(Boolean);
         }
       }
+    }
+    if (isSurpriseBag !== undefined) {
+      foodItem.isSurpriseBag = isSurpriseBag === true || isSurpriseBag === 'true';
+    }
+    if (estimatedValue !== undefined) {
+      foodItem.estimatedValue = Number(estimatedValue);
     }
     
     // Recalculate status based on quantity

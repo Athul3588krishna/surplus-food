@@ -64,6 +64,27 @@ const seedData = async () => {
     });
     console.log('Verified Restaurant account seeded: restaurant@surplus.com / restaurant123');
 
+    // Create seed Food Items for Verified Restaurant
+    let expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + 1);
+
+    await FoodItem.create({
+      restaurant: r1Profile._id,
+      name: 'Evening Bakery Surprise Bag 🎁',
+      description: 'A mystery assortment of fresh daily surplus baked goods, artisanal sourdough loaves, and buttery croissants.',
+      originalPrice: 15.00,
+      discountedPrice: 4.99,
+      quantity: 5,
+      pickupStartTime: '18:00',
+      pickupEndTime: '21:00',
+      expiryDate,
+      dietaryType: 'veg',
+      allergens: ['Nut-Free'],
+      isSurpriseBag: true,
+      estimatedValue: 15.00,
+      status: 'available'
+    });
+
     // 4. Create Unverified Restaurant (Auto-verified user, but profile is unverified)
     const r2User = await User.create({
       name: 'Cafe Barista',
