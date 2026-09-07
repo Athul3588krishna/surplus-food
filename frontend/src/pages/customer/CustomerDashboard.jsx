@@ -4,6 +4,79 @@ import { useAuth } from '../../context/AuthContext';
 import { generateReceiptPDF } from '../../utils/receiptGenerator';
 import { Search, MapPin, Clock, ShoppingBag, Utensils, Star, CreditCard, ShieldCheck } from 'lucide-react';
 
+// Live Expiry & Pickup Countdown Timer Component
+const ExpiryTimer = ({ expiryDate, pickupEndTime }) => {
+  const [timeLeft, setTimeLeft] = useState('');
+  const [isUrgent, setIsUrgent] = useState(false);
+  const [isExpired, setIsExpired] = useState(false);
+
+  useEffect(() => {
+    const calculateTime = () => {
+      let target = expiryDate ? new Date(expiryDate).getTime() : null;
+      if (!target && pickupEndTime) {
+        const [hours, minutes] = pickupEndTime.split(':');
+        const d = new Date();
+        d.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
+        if (d.getTime() < Date.now()) d.setDate(d.getDate() + 1);
+        target = d.getTime();
+      }
+
+      if (!target) return;
+
+      const diff = target - Date.now();
+      if (diff <= 0) {
+        setIsExpired(true);
+        setTimeLeft('Expired');
+        return;
+      }
+
+      setIsExpired(false);
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const secs = Math.floor((diff % (1000 * 60)) / 1000);
+
+      setIsUrgent(diff < 30 * 60 * 1000); // Less than 30 mins
+
+      const pad = (n) => String(n).padStart(2, '0');
+      if (hours > 0) {
+        setTimeLeft(`${pad(hours)}h ${pad(mins)}m ${pad(secs)}s`);
+      } else {
+        setTimeLeft(`${pad(mins)}m ${pad(secs)}s`);
+      }
+    };
+
+    calculateTime();
+    const interval = setInterval(calculateTime, 1000);
+
+    return () => clearInterval(interval);
+  }, [expiryDate, pickupEndTime]);
+
+  if (isExpired) {
+    return (
+      <span className="badge badge-danger" style={{ fontSize: '0.65rem', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+        🔴 Expired
+      </span>
+    );
+  }
+
+  return (
+    <span 
+      className={`badge ${isUrgent ? 'badge-danger' : 'badge-secondary'}`} 
+      style={{ 
+        fontSize: '0.65rem', 
+        display: 'inline-flex', 
+        alignItems: 'center', 
+        gap: '0.25rem',
+        background: isUrgent ? 'linear-gradient(135deg, #ef4444, #f59e0b)' : 'rgba(255,255,255,0.08)',
+        color: '#fff',
+        fontWeight: isUrgent ? 700 : 600
+      }}
+    >
+      <Clock size={10} /> {isUrgent ? '🔥 Ending Soon:' : '⏳ Ends In:'} {timeLeft}
+    </span>
+  );
+};
+
 const CustomerDashboard = () => {
   const { user } = useAuth();
   
@@ -343,9 +416,12 @@ const CustomerDashboard = () => {
                     <p style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }} className="text-secondary">
                       <MapPin size={12} /> {item.restaurant.address}
                     </p>
-                    <p style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }} className="text-secondary">
-                      <Clock size={12} /> Pickup: {item.pickupStartTime} - {item.pickupEndTime}
-                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <p style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }} className="text-secondary">
+                        <Clock size={12} /> Pickup: {item.pickupStartTime} - {item.pickupEndTime}
+                      </p>
+                      <ExpiryTimer expiryDate={item.expiryDate} pickupEndTime={item.pickupEndTime} />
+                    </div>
                     <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
                       {item.isSurpriseBag && (
                         <span className="badge" style={{ fontSize: '0.65rem', background: 'linear-gradient(135deg, #ec4899, #8b5cf6)', color: '#fff', fontWeight: 700 }}>

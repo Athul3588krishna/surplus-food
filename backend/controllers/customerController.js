@@ -140,6 +140,23 @@ const reserveFoodItem = async (req, res) => {
       address: foodItem.restaurant.address
     }).catch(err => console.error('Failed to send collection email:', err));
 
+    // Emit real-time Socket.io event to restaurant room
+    const io = req.app.get('io');
+    if (io) {
+      const roomName = `restaurant_${foodItem.restaurant._id.toString()}`;
+      io.to(roomName).emit('new_reservation', {
+        orderId: order._id,
+        customerName: req.user.name,
+        customerEmail: req.user.email,
+        itemName: foodItem.name,
+        quantity: qtyToReserve,
+        totalPrice,
+        token: pickupToken,
+        createdAt: order.createdAt
+      });
+      io.emit('listings_updated', { foodItemId: foodItem._id });
+    }
+
     res.status(201).json(order);
   } catch (error) {
     res.status(500).json({ message: error.message });

@@ -310,6 +310,7 @@ const getRestaurantAnalytics = async (req, res) => {
     });
 
     res.json({
+      profileId: profile._id,
       restaurantName: profile.restaurantName,
       cuisineType: profile.cuisineType,
       isVerified: profile.isVerified,

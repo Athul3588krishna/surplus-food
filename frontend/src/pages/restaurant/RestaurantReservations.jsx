@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import api from '../../services/api';
-import { ClipboardCheck, Phone, Check, X, ShieldCheck, Ticket, QrCode, Camera } from 'lucide-react';
+import { ClipboardCheck, Phone, Check, X, ShieldCheck, Ticket, QrCode, Camera, Bell } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
+import { io } from 'socket.io-client';
 
 const RestaurantReservations = () => {
   const [reservations, setReservations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+  const [liveAlert, setLiveAlert] = useState(null);
 
   // Token Verification Modal states
   const [verifyingOrder, setVerifyingOrder] = useState(null);
@@ -39,6 +41,18 @@ const RestaurantReservations = () => {
 
   useEffect(() => {
     fetchReservations();
+
+    // Socket.io for live reservation updates
+    const socket = io('http://localhost:5000');
+
+    socket.on('new_reservation', (data) => {
+      setLiveAlert(`🔔 New Order from ${data.customerName} for ${data.quantity}x ${data.itemName}! OTP Token: ${data.token}`);
+      fetchReservations(); // Live update table
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, []);
 
   // Handle QR Camera Scanner initialization & cleanup
@@ -195,6 +209,36 @@ const RestaurantReservations = () => {
           <QrCode size={20} /> Scan Customer QR
         </button>
       </header>
+
+      {/* Live Socket.io Notification Banner */}
+      {liveAlert && (
+        <div 
+          className="animate-fade-in" 
+          style={{ 
+            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(59, 130, 246, 0.15))', 
+            border: '1px solid var(--color-primary)', 
+            borderRadius: '12px', 
+            padding: '1rem 1.25rem', 
+            marginBottom: '2rem', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justify: 'space-between',
+            boxShadow: '0 4px 16px rgba(16, 185, 129, 0.2)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+            <Bell size={20} className="text-emerald" style={{ animation: 'bounce 1s infinite' }} />
+            <span>{liveAlert}</span>
+          </div>
+          <button 
+            className="btn btn-secondary btn-sm" 
+            style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}
+            onClick={() => setLiveAlert(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {errorMsg && !verifyingOrder && !scannerOpen && (
         <div className="badge badge-danger" style={{ width: '100%', padding: '1rem', marginBottom: '2rem', display: 'block', textTransform: 'none', textAlign: 'center' }}>

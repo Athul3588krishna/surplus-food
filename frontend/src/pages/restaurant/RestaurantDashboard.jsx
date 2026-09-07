@@ -1,12 +1,87 @@
 import { useState, useEffect } from 'react';
 import api from '../../services/api';
-import { Plus, BarChart3, Star, BadgeDollarSign, HeartHandshake, Utensils, Image, Trash2, Edit2, Check, X } from 'lucide-react';
+import { Plus, BarChart3, Star, BadgeDollarSign, HeartHandshake, Utensils, Image, Trash2, Edit2, Bell, Clock } from 'lucide-react';
+import { io } from 'socket.io-client';
+
+// Live Expiry & Pickup Countdown Timer Component
+const ExpiryTimer = ({ expiryDate, pickupEndTime }) => {
+  const [timeLeft, setTimeLeft] = useState('');
+  const [isUrgent, setIsUrgent] = useState(false);
+  const [isExpired, setIsExpired] = useState(false);
+
+  useEffect(() => {
+    const calculateTime = () => {
+      let target = expiryDate ? new Date(expiryDate).getTime() : null;
+      if (!target && pickupEndTime) {
+        const [hours, minutes] = pickupEndTime.split(':');
+        const d = new Date();
+        d.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
+        if (d.getTime() < Date.now()) d.setDate(d.getDate() + 1);
+        target = d.getTime();
+      }
+
+      if (!target) return;
+
+      const diff = target - Date.now();
+      if (diff <= 0) {
+        setIsExpired(true);
+        setTimeLeft('Expired');
+        return;
+      }
+
+      setIsExpired(false);
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const secs = Math.floor((diff % (1000 * 60)) / 1000);
+
+      setIsUrgent(diff < 30 * 60 * 1000);
+
+      const pad = (n) => String(n).padStart(2, '0');
+      if (hours > 0) {
+        setTimeLeft(`${pad(hours)}h ${pad(mins)}m ${pad(secs)}s`);
+      } else {
+        setTimeLeft(`${pad(mins)}m ${pad(secs)}s`);
+      }
+    };
+
+    calculateTime();
+    const interval = setInterval(calculateTime, 1000);
+
+    return () => clearInterval(interval);
+  }, [expiryDate, pickupEndTime]);
+
+  if (isExpired) {
+    return (
+      <span className="badge badge-danger" style={{ fontSize: '0.65rem', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+        🔴 Expired
+      </span>
+    );
+  }
+
+  return (
+    <span 
+      className={`badge ${isUrgent ? 'badge-danger' : 'badge-secondary'}`} 
+      style={{ 
+        fontSize: '0.65rem', 
+        display: 'inline-flex', 
+        alignItems: 'center', 
+        gap: '0.25rem',
+        background: isUrgent ? 'linear-gradient(135deg, #ef4444, #f59e0b)' : 'rgba(255,255,255,0.08)',
+        color: '#fff',
+        fontWeight: isUrgent ? 700 : 600
+      }}
+    >
+      <Clock size={10} /> {isUrgent ? '🔥 Ending Soon:' : '⏳ Ends In:'} {timeLeft}
+    </span>
+  );
+};
 
 const RestaurantDashboard = () => {
   const [listings, setListings] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+  const [liveNotification, setLiveNotification] = useState(null);
 
   // Add/Edit Listing Modal states
   const [showModal, setShowModal] = useState(false);
@@ -48,7 +123,39 @@ const RestaurantDashboard = () => {
 
   useEffect(() => {
     fetchData();
+
+    // Initialize Socket.io connection for live notifications
+    const socket = io('http://localhost:5000');
+
+    socket.on('connect', () => {
+      console.log('⚡ Connected to Socket.io server');
+    });
+
+    socket.on('new_reservation', (data) => {
+      setLiveNotification(`🔔 LIVE RESERVATION: ${data.customerName} reserved ${data.quantity}x ${data.itemName} ($${data.totalPrice.toFixed(2)})! Token: ${data.token}`);
+      // Refresh inventory and revenue stats live without page reload
+      fetchData();
+    });
+
+    socket.on('listings_updated', () => {
+      fetchData();
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, []);
+
+  // Join private room once analytics/profileId is available
+  useEffect(() => {
+    if (analytics && analytics.profileId) {
+      const socket = io('http://localhost:5000');
+      socket.emit('join_room', `restaurant_${analytics.profileId}`);
+      return () => {
+        socket.disconnect();
+      };
+    }
+  }, [analytics?.profileId]);
 
   const handleOpenAdd = () => {
     setEditingItem(null);
@@ -184,6 +291,36 @@ const RestaurantDashboard = () => {
         )}
       </header>
 
+      {/* Live Socket.io Notification Banner */}
+      {liveNotification && (
+        <div 
+          className="animate-fade-in" 
+          style={{ 
+            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(59, 130, 246, 0.15))', 
+            border: '1px solid var(--color-primary)', 
+            borderRadius: '12px', 
+            padding: '1rem 1.25rem', 
+            marginBottom: '2rem', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justify: 'space-between',
+            boxShadow: '0 4px 16px rgba(16, 185, 129, 0.2)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+            <Bell size={20} className="text-emerald" style={{ animation: 'bounce 1s infinite' }} />
+            <span>{liveNotification}</span>
+          </div>
+          <button 
+            className="btn btn-secondary btn-sm" 
+            style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}
+            onClick={() => setLiveNotification(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {errorMsg && !showModal && (
         <div className="badge badge-danger" style={{ width: '100%', padding: '1rem', marginBottom: '2rem', display: 'block', textTransform: 'none', textAlign: 'center' }}>
           {errorMsg}
@@ -292,7 +429,10 @@ const RestaurantDashboard = () => {
                     <p><strong>Original Price:</strong> ${item.originalPrice.toFixed(2)}</p>
                     <p><strong>Offer Price:</strong> <span className="text-emerald" style={{ fontWeight: 600 }}>${item.discountedPrice.toFixed(2)}</span></p>
                     <p><strong>In Stock:</strong> {item.quantity} bags</p>
-                    <p><strong>Pickup window:</strong> {item.pickupStartTime} - {item.pickupEndTime}</p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <p><strong>Pickup window:</strong> {item.pickupStartTime} - {item.pickupEndTime}</p>
+                      <ExpiryTimer expiryDate={item.expiryDate} pickupEndTime={item.pickupEndTime} />
+                    </div>
                     <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
                       {item.isSurpriseBag && (
                         <span className="badge" style={{ fontSize: '0.65rem', background: 'linear-gradient(135deg, #ec4899, #8b5cf6)', color: '#fff', fontWeight: 700 }}>
