@@ -1,6 +1,13 @@
 const RestaurantProfile = require('../models/RestaurantProfile');
 const FoodItem = require('../models/FoodItem');
 const Order = require('../models/Order');
+const { 
+  isValidObjectId, 
+  isValidTime, 
+  isValidPositiveNumber, 
+  isValidPositiveInteger, 
+  isValidOtp 
+} = require('../utils/validation');
 
 // Helper to get restaurant profile of logged-in user
 const getProfileOfUser = async (userId) => {
@@ -11,7 +18,47 @@ const getProfileOfUser = async (userId) => {
 // @route   POST /api/restaurant/listings
 // @access  Private (Restaurant only)
 const addFoodItem = async (req, res) => {
-  const { name, description, originalPrice, discountedPrice, quantity, pickupStartTime, pickupEndTime, dietaryType, allergens, isSurpriseBag, estimatedValue } = req.body;
+  let { name, description, originalPrice, discountedPrice, quantity, pickupStartTime, pickupEndTime, dietaryType, allergens, isSurpriseBag, estimatedValue } = req.body;
+
+  name = name?.trim();
+  description = description?.trim();
+
+  // Validate fields
+  if (!name || name.length < 2 || name.length > 100) {
+    return res.status(400).json({ message: 'Food item title is required (between 2 and 100 characters)' });
+  }
+
+  if (!originalPrice || !isValidPositiveNumber(originalPrice, 0.01)) {
+    return res.status(400).json({ message: 'Original price must be a valid positive number greater than 0' });
+  }
+
+  if (discountedPrice === undefined || discountedPrice === null || !isValidPositiveNumber(discountedPrice, 0)) {
+    return res.status(400).json({ message: 'Discounted price must be a valid non-negative number' });
+  }
+
+  if (Number(discountedPrice) > Number(originalPrice)) {
+    return res.status(400).json({ message: 'Discounted price cannot be higher than original price' });
+  }
+
+  if (!quantity || !isValidPositiveInteger(quantity, 1)) {
+    return res.status(400).json({ message: 'Quantity must be a positive integer (at least 1)' });
+  }
+
+  if (!pickupStartTime || !isValidTime(pickupStartTime)) {
+    return res.status(400).json({ message: 'Valid pickup start time (HH:mm) is required' });
+  }
+
+  if (!pickupEndTime || !isValidTime(pickupEndTime)) {
+    return res.status(400).json({ message: 'Valid pickup end time (HH:mm) is required' });
+  }
+
+  if (dietaryType && !['veg', 'non-veg', 'vegan'].includes(dietaryType)) {
+    return res.status(400).json({ message: 'Dietary type must be veg, non-veg, or vegan' });
+  }
+
+  if (estimatedValue && !isValidPositiveNumber(estimatedValue, 0.01)) {
+    return res.status(400).json({ message: 'Estimated value must be a valid positive number' });
+  }
 
   try {
     const profile = await getProfileOfUser(req.user._id);
@@ -95,7 +142,43 @@ const getRestaurantFoodItems = async (req, res) => {
 // @route   PUT /api/restaurant/listings/:id
 // @access  Private (Restaurant only)
 const updateFoodItem = async (req, res) => {
+  if (!isValidObjectId(req.params.id)) {
+    return res.status(400).json({ message: 'Invalid food listing ID' });
+  }
+
   const { name, description, originalPrice, discountedPrice, quantity, pickupStartTime, pickupEndTime, status, dietaryType, allergens, isSurpriseBag, estimatedValue } = req.body;
+
+  if (name !== undefined && (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100)) {
+    return res.status(400).json({ message: 'Food item title must be between 2 and 100 characters' });
+  }
+
+  if (originalPrice !== undefined && !isValidPositiveNumber(originalPrice, 0.01)) {
+    return res.status(400).json({ message: 'Original price must be greater than 0' });
+  }
+
+  if (discountedPrice !== undefined && !isValidPositiveNumber(discountedPrice, 0)) {
+    return res.status(400).json({ message: 'Discounted price cannot be negative' });
+  }
+
+  if (quantity !== undefined && !isValidPositiveInteger(quantity, 0)) {
+    return res.status(400).json({ message: 'Quantity must be a non-negative integer' });
+  }
+
+  if (pickupStartTime !== undefined && !isValidTime(pickupStartTime)) {
+    return res.status(400).json({ message: 'Valid pickup start time (HH:mm) is required' });
+  }
+
+  if (pickupEndTime !== undefined && !isValidTime(pickupEndTime)) {
+    return res.status(400).json({ message: 'Valid pickup end time (HH:mm) is required' });
+  }
+
+  if (dietaryType !== undefined && !['veg', 'non-veg', 'vegan'].includes(dietaryType)) {
+    return res.status(400).json({ message: 'Dietary type must be veg, non-veg, or vegan' });
+  }
+
+  if (status !== undefined && !['available', 'sold-out'].includes(status)) {
+    return res.status(400).json({ message: 'Status must be available or sold-out' });
+  }
 
   try {
     const profile = await getProfileOfUser(req.user._id);
@@ -113,11 +196,25 @@ const updateFoodItem = async (req, res) => {
       return res.status(401).json({ message: 'Not authorized to modify this listing' });
     }
 
-    foodItem.name = name || foodItem.name;
-    foodItem.description = description !== undefined ? description : foodItem.description;
-    foodItem.originalPrice = originalPrice !== undefined ? Number(originalPrice) : foodItem.originalPrice;
-    foodItem.discountedPrice = discountedPrice !== undefined ? Number(discountedPrice) : foodItem.discountedPrice;
-    foodItem.quantity = quantity !== undefined ? Number(quantity) : foodItem.quantity;
+    const finalOriginalPrice = originalPrice !== undefined ? Number(originalPrice) : foodItem.originalPrice;
+    const finalDiscountedPrice = discountedPrice !== undefined ? Number(discountedPrice) : foodItem.discountedPrice;
+
+    if (finalDiscountedPrice > finalOriginalPrice) {
+      return res.status(400).json({ message: 'Discounted price cannot be higher than original price' });
+    }
+
+    foodItem.name = name !== undefined ? name.trim() : foodItem.name;
+    foodItem.description = description !== undefined ? description.trim() : foodItem.description;
+    foodItem.originalPrice = finalOriginalPrice;
+    foodItem.discountedPrice = finalDiscountedPrice;
+    if (quantity !== undefined) {
+      foodItem.quantity = Math.max(0, Number(quantity));
+      if (foodItem.quantity === 0) {
+        foodItem.status = 'sold-out';
+      } else if (status === undefined && foodItem.status === 'sold-out' && foodItem.quantity > 0) {
+        foodItem.status = 'available';
+      }
+    }
     foodItem.pickupStartTime = pickupStartTime || foodItem.pickupStartTime;
     foodItem.pickupEndTime = pickupEndTime || foodItem.pickupEndTime;
     if (dietaryType) {
@@ -174,6 +271,10 @@ const updateFoodItem = async (req, res) => {
 // @route   DELETE /api/restaurant/listings/:id
 // @access  Private (Restaurant only)
 const deleteFoodItem = async (req, res) => {
+  if (!isValidObjectId(req.params.id)) {
+    return res.status(400).json({ message: 'Invalid food listing ID' });
+  }
+
   try {
     const profile = await getProfileOfUser(req.user._id);
     if (!profile) {
@@ -223,7 +324,14 @@ const getRestaurantReservations = async (req, res) => {
 // @route   PUT /api/restaurant/reservations/:id
 // @access  Private (Restaurant only)
 const updateReservationStatus = async (req, res) => {
+  if (!isValidObjectId(req.params.id)) {
+    return res.status(400).json({ message: 'Invalid reservation ID' });
+  }
+
   const { status } = req.body;
+  if (!status || !['reserved', 'collected', 'cancelled'].includes(status)) {
+    return res.status(400).json({ message: 'Valid status (reserved, collected, cancelled) is required' });
+  }
 
   try {
     const profile = await getProfileOfUser(req.user._id);
@@ -309,6 +417,15 @@ const getRestaurantAnalytics = async (req, res) => {
       }
     });
 
+    // Calculate total available stock across current listings
+    const listings = await FoodItem.find({ restaurant: profile._id });
+    let totalStockAvailable = 0;
+    listings.forEach((item) => {
+      if (item.status === 'available' && item.quantity > 0) {
+        totalStockAvailable += item.quantity;
+      }
+    });
+
     res.json({
       profileId: profile._id,
       restaurantName: profile.restaurantName,
@@ -316,10 +433,11 @@ const getRestaurantAnalytics = async (req, res) => {
       isVerified: profile.isVerified,
       rating: profile.rating,
       ratingCount: profile.ratingCount,
-      totalRevenue,
-      mealsSaved,
-      activeReservationsCount,
-      totalOrdersCount: orders.length
+      totalRevenue: Math.max(0, totalRevenue),
+      mealsSaved: Math.max(0, mealsSaved),
+      activeReservationsCount: Math.max(0, activeReservationsCount),
+      totalOrdersCount: orders.length,
+      totalStockAvailable: Math.max(0, totalStockAvailable)
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -330,7 +448,16 @@ const getRestaurantAnalytics = async (req, res) => {
 // @route   POST /api/restaurant/reservations/:id/verify
 // @access  Private (Restaurant only)
 const verifyReservationToken = async (req, res) => {
+  if (!isValidObjectId(req.params.id)) {
+    return res.status(400).json({ message: 'Invalid reservation ID' });
+  }
+
   const { token } = req.body;
+  const cleanToken = typeof token === 'string' ? token.trim() : String(token || '').trim();
+
+  if (!cleanToken || !isValidOtp(cleanToken)) {
+    return res.status(400).json({ message: 'Please provide a valid 6-digit collection OTP code' });
+  }
 
   try {
     const profile = await getProfileOfUser(req.user._id);
@@ -356,7 +483,7 @@ const verifyReservationToken = async (req, res) => {
     }
 
     // Verify token
-    if (order.token !== token) {
+    if (order.token !== cleanToken) {
       return res.status(400).json({ message: 'Invalid verification token. Please double-check the customer code.' });
     }
 
@@ -374,6 +501,10 @@ const verifyReservationToken = async (req, res) => {
 // @access  Private (Restaurant only)
 const scanAndVerifyQRCode = async (req, res) => {
   const { qrData, orderId, token } = req.body;
+
+  if (!qrData && !orderId && !token) {
+    return res.status(400).json({ message: 'Please provide QR code payload, Order ID, or OTP token' });
+  }
 
   try {
     const profile = await getProfileOfUser(req.user._id);
@@ -403,6 +534,10 @@ const scanAndVerifyQRCode = async (req, res) => {
         if (data.orderId) parsedOrderId = data.orderId;
         if (data.token) parsedToken = data.token;
       }
+    }
+
+    if (parsedOrderId && !isValidObjectId(parsedOrderId)) {
+      return res.status(400).json({ message: 'Invalid Order ID format in QR payload' });
     }
 
     let order = null;

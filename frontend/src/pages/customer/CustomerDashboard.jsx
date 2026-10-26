@@ -3,6 +3,7 @@ import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { generateReceiptPDF } from '../../utils/receiptGenerator';
 import { Search, MapPin, Clock, ShoppingBag, Utensils, Star, CreditCard, ShieldCheck } from 'lucide-react';
+import { isValidCardNumber, isValidCardExpiry, isValidCvv } from '../../utils/validators';
 
 // Live Expiry & Pickup Countdown Timer Component
 const ExpiryTimer = ({ expiryDate, pickupEndTime }) => {
@@ -150,13 +151,53 @@ const CustomerDashboard = () => {
 
   const handleProceedToPayment = (e) => {
     e.preventDefault();
+    setErrorMsg('');
+
+    const qty = parseInt(reserveQty, 10);
+    if (isNaN(qty) || qty < 1) {
+      setErrorMsg('Please select at least 1 item to reserve');
+      return;
+    }
+
+    if (selectedItem && selectedItem.quantity <= 0) {
+      setErrorMsg('This surplus food item is currently sold out');
+      return;
+    }
+
+    if (selectedItem && qty > selectedItem.quantity) {
+      setErrorMsg(`Only ${selectedItem.quantity} items available in stock. Cannot reserve ${qty}.`);
+      return;
+    }
+
     setCheckoutStep('payment');
   };
 
   const handleReserveSubmit = async (e) => {
     e.preventDefault();
-    setReserveLoading(true);
     setErrorMsg('');
+
+    const trimmedCardName = cardName.trim();
+    if (!trimmedCardName || trimmedCardName.length < 2) {
+      setErrorMsg('Please enter cardholder name (at least 2 characters)');
+      return;
+    }
+
+    if (!isValidCardNumber(cardNumber)) {
+      setErrorMsg('Please enter a valid 16-digit card number');
+      return;
+    }
+
+    if (!isValidCardExpiry(cardExpiry)) {
+      setErrorMsg('Please enter a valid expiry date (MM/YY) that is not expired');
+      return;
+    }
+
+    if (!isValidCvv(cardCvv)) {
+      setErrorMsg('Please enter a valid 3-digit CVV / security code');
+      return;
+    }
+
+    setReserveLoading(true);
 
     try {
       // Extract last 4 digits of simulated card
@@ -164,7 +205,7 @@ const CustomerDashboard = () => {
 
       const { data } = await api.post('/customer/reservations', {
         foodItemId: selectedItem._id,
-        quantity: reserveQty,
+        quantity: parseInt(reserveQty, 10),
         cardLast4: last4
       });
       
@@ -371,8 +412,11 @@ const CustomerDashboard = () => {
       ) : (
         <div className="grid-cols-3">
           {listings.map((item) => {
-            const savings = item.originalPrice - item.discountedPrice;
-            const savingsPercent = Math.round((savings / item.originalPrice) * 100);
+            const origPrice = Math.max(0.01, item.originalPrice || 0);
+            const discPrice = Math.max(0, item.discountedPrice || 0);
+            const savings = Math.max(0, origPrice - discPrice);
+            const savingsPercent = Math.min(100, Math.max(0, Math.round((savings / origPrice) * 100)));
+            const inStockQty = Math.max(0, item.quantity || 0);
             
             return (
               <div 
@@ -382,6 +426,7 @@ const CustomerDashboard = () => {
                   display: 'flex', 
                   flexDirection: 'column', 
                   height: '100%',
+                  minWidth: 0,
                   border: item.isSurpriseBag ? '1px solid rgba(236, 72, 153, 0.4)' : '1px solid var(--glass-border)',
                   boxShadow: item.isSurpriseBag ? '0 4px 20px rgba(236, 72, 153, 0.12)' : 'none'
                 }}
@@ -396,10 +441,12 @@ const CustomerDashboard = () => {
                 )}
 
                 {/* Content */}
-                <div style={{ flexGrow: 1 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                    <h3 style={{ fontSize: '1.2rem' }}>{item.name}</h3>
-                    <span className="badge badge-danger">{savingsPercent}% OFF</span>
+                <div style={{ flexGrow: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem', gap: '0.5rem' }}>
+                    <h3 style={{ fontSize: '1.2rem', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} title={item.name}>
+                      {item.name}
+                    </h3>
+                    <span className="badge badge-danger" style={{ flexShrink: 0 }}>{savingsPercent}% OFF</span>
                   </div>
 
                   <p className="text-emerald" style={{ fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.75rem' }}>
@@ -416,13 +463,16 @@ const CustomerDashboard = () => {
                     <p style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }} className="text-secondary">
                       <MapPin size={12} /> {item.restaurant.address}
                     </p>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <p style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }} className="text-secondary">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
+                      <p style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', margin: 0 }} className="text-secondary">
                         <Clock size={12} /> Pickup: {item.pickupStartTime} - {item.pickupEndTime}
                       </p>
                       <ExpiryTimer expiryDate={item.expiryDate} pickupEndTime={item.pickupEndTime} />
                     </div>
-                    <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
+                    <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.4rem', alignItems: 'center' }}>
+                      <span className={`badge ${inStockQty > 0 ? 'badge-secondary' : 'badge-danger'}`} style={{ fontSize: '0.65rem' }}>
+                        📦 {inStockQty > 0 ? `${inStockQty} in stock` : 'Sold out'}
+                      </span>
                       {item.isSurpriseBag && (
                         <span className="badge" style={{ fontSize: '0.65rem', background: 'linear-gradient(135deg, #ec4899, #8b5cf6)', color: '#fff', fontWeight: 700 }}>
                           🎁 MYSTERY BAG
@@ -441,19 +491,23 @@ const CustomerDashboard = () => {
                 </div>
 
                 {/* Footer / Pricing & Action */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--glass-border)', paddingTop: '1rem', marginTop: 'auto' }}>
-                  <div>
-                    <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)' }}>${item.discountedPrice.toFixed(2)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--glass-border)', paddingTop: '1rem', marginTop: 'auto', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                      ${discPrice.toFixed(2)}
+                    </span>
                     <span style={{ textDecoration: 'line-through', fontSize: '0.85rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
-                      ${(item.estimatedValue || item.originalPrice).toFixed(2)}
+                      ${Math.max(0, item.estimatedValue || origPrice).toFixed(2)}
                     </span>
                   </div>
 
                   <button 
                     onClick={() => handleOpenReserve(item)}
-                    className="btn btn-primary btn-sm"
+                    className={`btn btn-sm ${inStockQty > 0 ? 'btn-primary' : 'btn-secondary'}`}
+                    disabled={inStockQty <= 0}
+                    style={inStockQty <= 0 ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
                   >
-                    Reserve ({item.quantity})
+                    {inStockQty > 0 ? `Reserve (${inStockQty})` : 'Sold Out'}
                   </button>
                 </div>
               </div>
@@ -473,38 +527,48 @@ const CustomerDashboard = () => {
               <form onSubmit={handleProceedToPayment}>
                 <h3 style={{ fontSize: '1.4rem', marginBottom: '1.25rem', fontFamily: 'var(--font-display)' }}>Reserve Surplus Food</h3>
                 
-                <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
-                  <h4 style={{ fontSize: '1.05rem' }}>{selectedItem.name}</h4>
+                <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1.5rem', minWidth: 0 }}>
+                  <h4 style={{ fontSize: '1.05rem', wordBreak: 'break-word' }}>{selectedItem.name}</h4>
                   <p className="text-emerald" style={{ fontWeight: 600, fontSize: '0.9rem', margin: '0.25rem 0' }}>{selectedItem.restaurant.restaurantName}</p>
                   <p className="text-muted" style={{ fontSize: '0.8rem' }}>Pickup: {selectedItem.pickupStartTime} - {selectedItem.pickupEndTime}</p>
                   
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', fontSize: '0.9rem', fontWeight: 600 }}>
                     <span>Price per item:</span>
-                    <span className="text-emerald">${selectedItem.discountedPrice.toFixed(2)}</span>
+                    <span className="text-emerald">${Math.max(0, selectedItem.discountedPrice || 0).toFixed(2)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.3rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    <span>Available stock:</span>
+                    <span style={{ fontWeight: 600 }}>{Math.max(0, selectedItem.quantity)} items</span>
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Select Quantity</label>
-                  <select 
-                    className="form-control" 
-                    value={reserveQty} 
-                    onChange={(e) => setReserveQty(Number(e.target.value))}
-                  >
-                    {[...Array(selectedItem.quantity).keys()].map((q) => (
-                      <option key={q + 1} value={q + 1}>{q + 1}</option>
-                    ))}
-                  </select>
-                </div>
+                {selectedItem.quantity <= 0 ? (
+                  <div className="badge badge-danger" style={{ width: '100%', padding: '0.75rem', textAlign: 'center', marginBottom: '1.5rem', textTransform: 'none' }}>
+                    Sorry, this surplus food item is currently sold out.
+                  </div>
+                ) : (
+                  <div className="form-group">
+                    <label className="form-label">Select Quantity</label>
+                    <select 
+                      className="form-control" 
+                      value={reserveQty} 
+                      onChange={(e) => setReserveQty(Math.max(1, Number(e.target.value)))}
+                    >
+                      {[...Array(Math.min(50, Math.max(1, selectedItem.quantity))).keys()].map((q) => (
+                        <option key={q + 1} value={q + 1}>{q + 1}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <div>
                     <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Subtotal:</p>
                     <p style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                      ${(selectedItem.discountedPrice * reserveQty).toFixed(2)}
+                      ${Math.max(0, (selectedItem.discountedPrice || 0) * Math.max(1, reserveQty)).toFixed(2)}
                     </p>
                   </div>
-                  <button type="submit" className="btn btn-primary btn-sm">
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={selectedItem.quantity <= 0}>
                     Proceed to Payment
                   </button>
                 </div>
@@ -587,11 +651,11 @@ const CustomerDashboard = () => {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <div>
                     <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Total Cost:</p>
                     <p style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                      ${(selectedItem.discountedPrice * reserveQty).toFixed(2)}
+                      ${Math.max(0, (selectedItem.discountedPrice || 0) * Math.max(1, reserveQty)).toFixed(2)}
                     </p>
                   </div>
 

@@ -60,14 +60,27 @@ const CustomerOrders = () => {
 
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
-    setReviewLoading(true);
     setErrorMsg('');
+
+    const ratingNum = parseInt(rating, 10);
+    if (isNaN(ratingNum) || ratingNum < 1 || ratingNum > 5) {
+      setErrorMsg('Please select a star rating between 1 and 5');
+      return;
+    }
+
+    const trimmedComment = comment.trim();
+    if (trimmedComment.length > 500) {
+      setErrorMsg('Review comment cannot exceed 500 characters');
+      return;
+    }
+
+    setReviewLoading(true);
 
     try {
       await api.post('/customer/rate', {
         orderId: selectedOrder._id,
-        rating,
-        comment
+        rating: ratingNum,
+        comment: trimmedComment
       });
       setReviewSuccess(true);
       setTimeout(() => {

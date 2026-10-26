@@ -90,45 +90,45 @@ const AdminDashboard = () => {
         <>
           {/* Analytics Stats Grid */}
           {stats && (
-            <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '3rem' }} className="analytics-grid">
+            <section className="analytics-grid">
               
-              <div className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <div style={{ padding: '0.6rem', borderRadius: 'var(--border-radius-sm)', background: 'var(--color-primary-glow)' }}>
+              <div className="glass-panel analytics-widget">
+                <div className="analytics-widget-icon" style={{ background: 'var(--color-primary-glow)' }}>
                   <BadgeDollarSign className="text-emerald" size={22} />
                 </div>
-                <div>
-                  <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Total Saved Sales</p>
-                  <h3 style={{ fontSize: '1.35rem' }}>${stats.totalSales.toFixed(2)}</h3>
+                <div className="analytics-widget-content">
+                  <p className="analytics-widget-label">Total Saved Sales</p>
+                  <h3 className="analytics-widget-value">${Math.max(0, stats.totalSales || 0).toFixed(2)}</h3>
                 </div>
               </div>
 
-              <div className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <div style={{ padding: '0.6rem', borderRadius: 'var(--border-radius-sm)', background: 'rgba(99, 102, 241, 0.1)' }}>
+              <div className="glass-panel analytics-widget">
+                <div className="analytics-widget-icon" style={{ background: 'rgba(99, 102, 241, 0.1)' }}>
                   <HeartHandshake className="text-indigo" size={22} />
                 </div>
-                <div>
-                  <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Meals Rescued</p>
-                  <h3 style={{ fontSize: '1.35rem' }}>{stats.totalMealsSaved}</h3>
+                <div className="analytics-widget-content">
+                  <p className="analytics-widget-label">Meals Rescued</p>
+                  <h3 className="analytics-widget-value">{Math.max(0, stats.totalMealsSaved || 0)}</h3>
                 </div>
               </div>
 
-              <div className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <div style={{ padding: '0.6rem', borderRadius: 'var(--border-radius-sm)', background: 'rgba(255, 255, 255, 0.05)' }}>
+              <div className="glass-panel analytics-widget">
+                <div className="analytics-widget-icon" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
                   <Users className="text-secondary" size={22} />
                 </div>
-                <div>
-                  <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Customers</p>
-                  <h3 style={{ fontSize: '1.35rem' }}>{stats.totalCustomers}</h3>
+                <div className="analytics-widget-content">
+                  <p className="analytics-widget-label">Customers</p>
+                  <h3 className="analytics-widget-value">{Math.max(0, stats.totalCustomers || 0)}</h3>
                 </div>
               </div>
 
-              <div className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <div style={{ padding: '0.6rem', borderRadius: 'var(--border-radius-sm)', background: 'rgba(245, 158, 11, 0.1)' }}>
+              <div className="glass-panel analytics-widget">
+                <div className="analytics-widget-icon" style={{ background: 'rgba(245, 158, 11, 0.1)' }}>
                   <Store className="text-amber" size={22} />
                 </div>
-                <div>
-                  <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Verified Stores</p>
-                  <h3 style={{ fontSize: '1.35rem' }}>
+                <div className="analytics-widget-content">
+                  <p className="analytics-widget-label">Verified Stores</p>
+                  <h3 className="analytics-widget-value">
                     {stats.verifiedRestaurants} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>({stats.pendingRestaurants} pending)</span>
                   </h3>
                 </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { User, Phone, KeyRound, Mail, CheckCircle } from 'lucide-react';
+import { isValidPhone, isValidPassword } from '../../utils/validators';
 
 const CustomerProfile = () => {
   const { user, updateProfile } = useAuth();
@@ -28,16 +29,35 @@ const CustomerProfile = () => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
-    setLoading(true);
 
-    if (password && password !== confirmPassword) {
-      setErrorMsg('Passwords do not match');
-      setLoading(false);
+    const trimmedName = name.trim();
+    const trimmedPhone = phoneNumber.trim();
+
+    if (!trimmedName || trimmedName.length < 2) {
+      setErrorMsg('Display name must be at least 2 characters long');
       return;
     }
 
+    if (!trimmedPhone || !isValidPhone(trimmedPhone)) {
+      setErrorMsg('Please enter a valid phone number with at least 10 digits');
+      return;
+    }
+
+    if (password) {
+      if (!isValidPassword(password)) {
+        setErrorMsg('New password must be at least 6 characters long');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setErrorMsg('New password and confirmation password do not match');
+        return;
+      }
+    }
+
+    setLoading(true);
+
     try {
-      const payload = { name, phoneNumber };
+      const payload = { name: trimmedName, phoneNumber: trimmedPhone };
       if (password) payload.password = password;
 
       const { data } = await api.put('/auth/profile', payload);

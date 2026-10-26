@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { KeyRound, Mail, User as UserIcon, Phone, Store, MapPin, UtensilsCrossed, FileText, CheckCircle } from 'lucide-react';
+import { isValidEmail, isValidPhone, isValidPassword, isValidOtp } from '../utils/validators';
 
 const AuthPage = () => {
   const { login, register, verifyRegisterOTP, user } = useAuth();
@@ -66,10 +67,20 @@ const AuthPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
-    setLoadingMsg(true);
 
+    // Pre-flight validation
     if (isLogin) {
-      const res = await login(email, password);
+      if (!email.trim() || !isValidEmail(email)) {
+        setErrorMsg('Please enter a valid email address (e.g. name@example.com)');
+        return;
+      }
+      if (!password) {
+        setErrorMsg('Please enter your password');
+        return;
+      }
+
+      setLoadingMsg(true);
+      const res = await login(email.trim(), password);
       setLoadingMsg(false);
       if (!res.success) {
         if (res.needsVerification) {
@@ -80,27 +91,66 @@ const AuthPage = () => {
         }
       }
     } else {
-      // Build registration payload
+      // Validate all registration fields
+      const trimmedName = name.trim();
+      const trimmedEmail = email.trim();
+      const trimmedPhone = phoneNumber.trim();
+
+      if (!trimmedName || trimmedName.length < 2) {
+        setErrorMsg('Please enter your full name (at least 2 characters)');
+        return;
+      }
+
+      if (!trimmedEmail || !isValidEmail(trimmedEmail)) {
+        setErrorMsg('Please enter a valid email address');
+        return;
+      }
+
+      if (!trimmedPhone || !isValidPhone(trimmedPhone)) {
+        setErrorMsg('Please enter a valid phone number with at least 10 digits');
+        return;
+      }
+
+      if (!isValidPassword(password)) {
+        setErrorMsg('Password must be at least 6 characters long');
+        return;
+      }
+
       const payload = {
-        name,
-        email,
+        name: trimmedName,
+        email: trimmedEmail,
         password,
         role,
-        phoneNumber
+        phoneNumber: trimmedPhone
       };
 
       if (role === 'restaurant') {
-        if (!restaurantName || !address || !cuisineType) {
-          setErrorMsg('Please fill in all restaurant business details.');
-          setLoadingMsg(false);
+        const trimmedRName = restaurantName.trim();
+        const trimmedAddr = address.trim();
+        const trimmedCuisine = cuisineType.trim();
+
+        if (!trimmedRName || trimmedRName.length < 2) {
+          setErrorMsg('Please enter your restaurant/business name (at least 2 characters)');
           return;
         }
-        payload.restaurantName = restaurantName;
-        payload.address = address;
-        payload.cuisineType = cuisineType;
-        payload.description = description;
+
+        if (!trimmedAddr || trimmedAddr.length < 5) {
+          setErrorMsg('Please enter a complete street address (at least 5 characters)');
+          return;
+        }
+
+        if (!trimmedCuisine || trimmedCuisine.length < 2) {
+          setErrorMsg('Please specify your cuisine category (e.g. Bakery, Italian, Cafe)');
+          return;
+        }
+
+        payload.restaurantName = trimmedRName;
+        payload.address = trimmedAddr;
+        payload.cuisineType = trimmedCuisine;
+        payload.description = description.trim();
       }
 
+      setLoadingMsg(true);
       const res = await register(payload);
       setLoadingMsg(false);
       if (res.success) {
@@ -115,9 +165,14 @@ const AuthPage = () => {
   const handleOtpSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
-    setLoadingMsg(true);
 
-    const res = await verifyRegisterOTP(otpEmail, enteredOtp);
+    if (!isValidOtp(enteredOtp)) {
+      setErrorMsg('Please enter the complete 6-digit verification code');
+      return;
+    }
+
+    setLoadingMsg(true);
+    const res = await verifyRegisterOTP(otpEmail, enteredOtp.trim());
     setLoadingMsg(false);
     
     if (!res.success) {

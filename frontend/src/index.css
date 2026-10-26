@@ -153,6 +153,8 @@ a:hover {
   margin-bottom: 1.25rem;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  width: 100%;
 }
 
 .form-label {
@@ -164,6 +166,9 @@ a:hover {
 }
 
 .form-control {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid var(--glass-border);
   border-radius: var(--border-radius-sm);
@@ -348,7 +353,9 @@ tr:hover td {
 
 .modal-content {
   width: 100%;
-  max-width: 500px;
+  max-width: 540px;
+  box-sizing: border-box;
+  overflow-x: hidden;
   background: var(--bg-secondary);
   border: 1px solid var(--glass-border);
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
@@ -458,3 +465,55 @@ tr:hover td {
   border-radius: var(--border-radius-sm);
   margin-bottom: 1rem;
 }
+
+/* Analytics Grid & Widgets */
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2.5rem;
+}
+
+.analytics-widget {
+  min-width: 0;
+  overflow: hidden;
+  padding: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.analytics-widget-icon {
+  flex-shrink: 0;
+  padding: 0.7rem;
+  border-radius: var(--border-radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.analytics-widget-content {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.analytics-widget-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.analytics-widget-value {
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 0.15rem;
+}
+

@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const RestaurantProfile = require('../models/RestaurantProfile');
 const { sendOTP } = require('../config/mailer');
+const { isValidEmail, isValidPhone, isValidPassword, isValidName, isValidOtp } = require('../utils/validation');
 
 // Generate JWT Token
 const generateToken = (id) => {
@@ -14,7 +15,46 @@ const generateToken = (id) => {
 // @route   POST /api/auth/register
 // @access  Public
 const registerUser = async (req, res) => {
-  const { name, email, password, role, phoneNumber, restaurantName, address, cuisineType, description } = req.body;
+  let { name, email, password, role, phoneNumber, restaurantName, address, cuisineType, description } = req.body;
+
+  name = name?.trim();
+  email = email?.trim().toLowerCase();
+  phoneNumber = phoneNumber?.trim();
+  restaurantName = restaurantName?.trim();
+  address = address?.trim();
+  cuisineType = cuisineType?.trim();
+  description = description?.trim();
+
+  // Validate fields
+  if (!name || !isValidName(name)) {
+    return res.status(400).json({ message: 'Full name is required and must be between 2 and 100 characters' });
+  }
+
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ message: 'Please provide a valid email address' });
+  }
+
+  if (!password || !isValidPassword(password)) {
+    return res.status(400).json({ message: 'Password must be at least 6 characters long' });
+  }
+
+  if (!phoneNumber || !isValidPhone(phoneNumber)) {
+    return res.status(400).json({ message: 'Please provide a valid phone number with at least 10 digits' });
+  }
+
+  const userRole = role === 'restaurant' ? 'restaurant' : 'customer';
+
+  if (userRole === 'restaurant') {
+    if (!restaurantName || restaurantName.length < 2) {
+      return res.status(400).json({ message: 'Restaurant name is required and must be at least 2 characters' });
+    }
+    if (!address || address.length < 5) {
+      return res.status(400).json({ message: 'Street address is required and must be at least 5 characters' });
+    }
+    if (!cuisineType || cuisineType.length < 2) {
+      return res.status(400).json({ message: 'Cuisine category is required and must be at least 2 characters' });
+    }
+  }
 
   try {
     // Check if user already exists
@@ -32,7 +72,7 @@ const registerUser = async (req, res) => {
       name,
       email,
       password,
-      role: role || 'customer',
+      role: userRole,
       phoneNumber,
       isVerified: false,
       otpCode,
@@ -40,17 +80,9 @@ const registerUser = async (req, res) => {
     });
 
     if (user) {
-      let restaurantProfile = null;
-
       // If user is a restaurant, initialize restaurant profile
       if (user.role === 'restaurant') {
-        if (!restaurantName || !address || !cuisineType) {
-          // Rollback user creation
-          await User.findByIdAndDelete(user._id);
-          return res.status(400).json({ message: 'Restaurant Name, Address, and Cuisine Type are required for restaurants' });
-        }
-
-        restaurantProfile = await RestaurantProfile.create({
+        await RestaurantProfile.create({
           user: user._id,
           restaurantName,
           address,
@@ -80,7 +112,17 @@ const registerUser = async (req, res) => {
 // @route   POST /api/auth/verify-otp
 // @access  Public
 const verifyOTP = async (req, res) => {
-  const { email, otp } = req.body;
+  let { email, otp } = req.body;
+  email = email?.trim().toLowerCase();
+  otp = typeof otp === 'string' ? otp.trim() : String(otp || '').trim();
+
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ message: 'Please provide a valid email address' });
+  }
+
+  if (!otp || !isValidOtp(otp)) {
+    return res.status(400).json({ message: 'Please enter a valid 6-digit verification code' });
+  }
 
   try {
     const user = await User.findOne({ email });
@@ -132,7 +174,16 @@ const verifyOTP = async (req, res) => {
 // @route   POST /api/auth/login
 // @access  Public
 const loginUser = async (req, res) => {
-  const { email, password } = req.body;
+  let { email, password } = req.body;
+  email = email?.trim().toLowerCase();
+
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ message: 'Please provide a valid email address' });
+  }
+
+  if (!password) {
+    return res.status(400).json({ message: 'Password is required' });
+  }
 
   try {
     const user = await User.findOne({ email });
@@ -206,47 +257,87 @@ const updateUserProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
 
-    if (user) {
-      user.name = req.body.name || user.name;
-      user.phoneNumber = req.body.phoneNumber || user.phoneNumber;
-
-      if (req.body.password) {
-        user.password = req.body.password;
-      }
-
-      const updatedUser = await user.save();
-
-      let updatedProfile = null;
-      if (user.role === 'restaurant') {
-        const profile = await RestaurantProfile.findOne({ user: user._id });
-        if (profile) {
-          profile.restaurantName = req.body.restaurantName || profile.restaurantName;
-          profile.address = req.body.address || profile.address;
-          profile.cuisineType = req.body.cuisineType || profile.cuisineType;
-          profile.description = req.body.description || profile.description;
-          profile.latitude = req.body.latitude || profile.latitude;
-          profile.longitude = req.body.longitude || profile.longitude;
-          
-          if (req.file) {
-            profile.imagePath = `/uploads/${req.file.filename}`;
-          }
-
-          updatedProfile = await profile.save();
-        }
-      }
-
-      res.json({
-        _id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        role: updatedUser.role,
-        phoneNumber: updatedUser.phoneNumber,
-        token: generateToken(updatedUser._id),
-        restaurantProfile: updatedProfile
-      });
-    } else {
-      res.status(404).json({ message: 'User not found' });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
+
+    if (req.body.name !== undefined) {
+      const trimmedName = req.body.name.trim();
+      if (!isValidName(trimmedName)) {
+        return res.status(400).json({ message: 'Name must be between 2 and 100 characters' });
+      }
+      user.name = trimmedName;
+    }
+
+    if (req.body.phoneNumber !== undefined) {
+      const trimmedPhone = req.body.phoneNumber.trim();
+      if (!isValidPhone(trimmedPhone)) {
+        return res.status(400).json({ message: 'Phone number must have at least 10 digits' });
+      }
+      user.phoneNumber = trimmedPhone;
+    }
+
+    if (req.body.password) {
+      if (!isValidPassword(req.body.password)) {
+        return res.status(400).json({ message: 'New password must be at least 6 characters long' });
+      }
+      user.password = req.body.password;
+    }
+
+    const updatedUser = await user.save();
+
+    let updatedProfile = null;
+    if (user.role === 'restaurant') {
+      const profile = await RestaurantProfile.findOne({ user: user._id });
+      if (profile) {
+        if (req.body.restaurantName !== undefined) {
+          const rName = req.body.restaurantName.trim();
+          if (rName.length < 2) {
+            return res.status(400).json({ message: 'Restaurant name must be at least 2 characters' });
+          }
+          profile.restaurantName = rName;
+        }
+
+        if (req.body.address !== undefined) {
+          const addr = req.body.address.trim();
+          if (addr.length < 5) {
+            return res.status(400).json({ message: 'Street address must be at least 5 characters' });
+          }
+          profile.address = addr;
+        }
+
+        if (req.body.cuisineType !== undefined) {
+          const cType = req.body.cuisineType.trim();
+          if (cType.length < 2) {
+            return res.status(400).json({ message: 'Cuisine category must be at least 2 characters' });
+          }
+          profile.cuisineType = cType;
+        }
+
+        if (req.body.description !== undefined) {
+          profile.description = req.body.description.trim();
+        }
+
+        if (req.body.latitude !== undefined) profile.latitude = req.body.latitude;
+        if (req.body.longitude !== undefined) profile.longitude = req.body.longitude;
+        
+        if (req.file) {
+          profile.imagePath = `/uploads/${req.file.filename}`;
+        }
+
+        updatedProfile = await profile.save();
+      }
+    }
+
+    res.json({
+      _id: updatedUser._id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      role: updatedUser.role,
+      phoneNumber: updatedUser.phoneNumber,
+      token: generateToken(updatedUser._id),
+      restaurantProfile: updatedProfile
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

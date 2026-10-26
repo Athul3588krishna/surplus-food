@@ -17,16 +17,18 @@ const foodItemSchema = new mongoose.Schema({
   },
   originalPrice: {
     type: Number,
-    required: true
+    required: true,
+    min: [0.01, 'Original price must be greater than 0']
   },
   discountedPrice: {
     type: Number,
-    required: true
+    required: true,
+    min: [0, 'Discounted price cannot be negative']
   },
   quantity: {
     type: Number,
     required: true,
-    min: 0,
+    min: [0, 'Quantity cannot be negative'],
     default: 1
   },
   pickupStartTime: {

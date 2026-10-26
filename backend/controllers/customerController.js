@@ -3,6 +3,12 @@ const FoodItem = require('../models/FoodItem');
 const Order = require('../models/Order');
 const Review = require('../models/Review');
 const { sendCollectionToken } = require('../config/mailer');
+const { 
+  isValidObjectId, 
+  isValidPositiveInteger, 
+  isValidPositiveNumber, 
+  isValidRating 
+} = require('../utils/validation');
 
 // @desc    Browse verified restaurants
 // @route   GET /api/customer/restaurants
@@ -23,6 +29,10 @@ const getRestaurants = async (req, res) => {
 // @access  Private (Customer only)
 const getFoodListings = async (req, res) => {
   const { search, cuisine, maxPrice, dietaryType, allergen, isSurpriseBag } = req.query;
+
+  if (maxPrice && !isValidPositiveNumber(maxPrice, 0)) {
+    return res.status(400).json({ message: 'Max price filter must be a valid positive number' });
+  }
 
   try {
     // 1. Find all verified restaurants
@@ -77,7 +87,16 @@ const getFoodListings = async (req, res) => {
 // @access  Private (Customer only)
 const reserveFoodItem = async (req, res) => {
   const { foodItemId, quantity } = req.body;
-  const qtyToReserve = Number(quantity) || 1;
+
+  if (!isValidObjectId(foodItemId)) {
+    return res.status(400).json({ message: 'Invalid or missing food item ID' });
+  }
+
+  if (!isValidPositiveInteger(quantity, 1)) {
+    return res.status(400).json({ message: 'Quantity must be a positive integer (at least 1)' });
+  }
+
+  const qtyToReserve = Number(quantity);
 
   try {
     const foodItem = await FoodItem.findById(foodItemId).populate('restaurant');
@@ -90,10 +109,14 @@ const reserveFoodItem = async (req, res) => {
       return res.status(400).json({ message: 'Cannot reserve: This food listing has expired' });
     }
 
-    // Check quantity
+    // Check quantity and out-of-stock condition
+    if (foodItem.quantity <= 0) {
+      return res.status(400).json({ message: 'Cannot reserve: This surplus food item is sold out' });
+    }
+
     if (foodItem.quantity < qtyToReserve) {
       return res.status(400).json({
-        message: `Only ${foodItem.quantity} items left. Cannot reserve ${qtyToReserve} items.`
+        message: `Only ${foodItem.quantity} items left in stock. Cannot reserve ${qtyToReserve} items.`
       });
     }
 
@@ -102,8 +125,8 @@ const reserveFoodItem = async (req, res) => {
       return res.status(403).json({ message: 'Cannot reserve from an unverified restaurant profile' });
     }
 
-    // Decrement stock
-    foodItem.quantity -= qtyToReserve;
+    // Decrement stock safely (ensuring non-negative)
+    foodItem.quantity = Math.max(0, foodItem.quantity - qtyToReserve);
     if (foodItem.quantity === 0) {
       foodItem.status = 'sold-out';
     }
@@ -112,8 +135,8 @@ const reserveFoodItem = async (req, res) => {
     // Generate 6-digit collection OTP code
     const pickupToken = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Create reservation order
-    const totalPrice = foodItem.discountedPrice * qtyToReserve;
+    // Create reservation order with non-negative total price
+    const totalPrice = Math.max(0, Number((foodItem.discountedPrice * qtyToReserve).toFixed(2)));
     const order = await Order.create({
       customer: req.user._id,
       restaurant: foodItem.restaurant._id,
@@ -167,6 +190,10 @@ const reserveFoodItem = async (req, res) => {
 // @route   PUT /api/customer/reservations/:id/cancel
 // @access  Private (Customer only)
 const cancelReservation = async (req, res) => {
+  if (!isValidObjectId(req.params.id)) {
+    return res.status(400).json({ message: 'Invalid reservation ID' });
+  }
+
   try {
     const order = await Order.findById(req.params.id);
     if (!order) {
@@ -237,11 +264,21 @@ const getCustomerOrders = async (req, res) => {
 // @access  Private (Customer only)
 const rateRestaurant = async (req, res) => {
   const { orderId, rating, comment } = req.body;
-  const ratingNum = Number(rating);
 
-  if (ratingNum < 1 || ratingNum > 5) {
-    return res.status(400).json({ message: 'Rating must be between 1 and 5 stars' });
+  if (!isValidObjectId(orderId)) {
+    return res.status(400).json({ message: 'Invalid order ID' });
   }
+
+  if (!isValidRating(rating)) {
+    return res.status(400).json({ message: 'Rating must be an integer between 1 and 5 stars' });
+  }
+
+  const trimmedComment = comment ? String(comment).trim() : '';
+  if (trimmedComment.length > 500) {
+    return res.status(400).json({ message: 'Review comment cannot exceed 500 characters' });
+  }
+
+  const ratingNum = Number(rating);
 
   try {
     const order = await Order.findById(orderId);
@@ -271,7 +308,7 @@ const rateRestaurant = async (req, res) => {
       restaurant: order.restaurant,
       order: orderId,
       rating: ratingNum,
-      comment
+      comment: trimmedComment
     });
 
     // Recalculate average rating of restaurant

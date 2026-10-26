@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Store, MapPin, UtensilsCrossed, FileText, User, Phone, CheckCircle, Image } from 'lucide-react';
+import { isValidPhone } from '../../utils/validators';
 
 const RestaurantProfileSetup = () => {
   const { user, updateProfile } = useAuth();
@@ -47,15 +48,47 @@ const RestaurantProfileSetup = () => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
+
+    const trimmedName = name.trim();
+    const trimmedPhone = phoneNumber.trim();
+    const trimmedRName = restaurantName.trim();
+    const trimmedAddr = address.trim();
+    const trimmedCuisine = cuisineType.trim();
+
+    if (!trimmedName || trimmedName.length < 2) {
+      setErrorMsg('Please enter a valid contact name (at least 2 characters)');
+      return;
+    }
+
+    if (!trimmedPhone || !isValidPhone(trimmedPhone)) {
+      setErrorMsg('Please enter a valid phone number with at least 10 digits');
+      return;
+    }
+
+    if (!trimmedRName || trimmedRName.length < 2) {
+      setErrorMsg('Please enter a valid restaurant brand name (at least 2 characters)');
+      return;
+    }
+
+    if (!trimmedAddr || trimmedAddr.length < 5) {
+      setErrorMsg('Please enter a valid store street address (at least 5 characters)');
+      return;
+    }
+
+    if (!trimmedCuisine || trimmedCuisine.length < 2) {
+      setErrorMsg('Please enter a cuisine category (at least 2 characters)');
+      return;
+    }
+
     setLoading(true);
 
     const formData = new FormData();
-    formData.append('name', name);
-    formData.append('phoneNumber', phoneNumber);
-    formData.append('restaurantName', restaurantName);
-    formData.append('address', address);
-    formData.append('cuisineType', cuisineType);
-    formData.append('description', description);
+    formData.append('name', trimmedName);
+    formData.append('phoneNumber', trimmedPhone);
+    formData.append('restaurantName', trimmedRName);
+    formData.append('address', trimmedAddr);
+    formData.append('cuisineType', trimmedCuisine);
+    formData.append('description', description.trim());
     
     if (imageFile) {
       formData.append('image', imageFile);

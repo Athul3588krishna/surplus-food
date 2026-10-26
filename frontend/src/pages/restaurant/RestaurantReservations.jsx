@@ -147,12 +147,19 @@ const RestaurantReservations = () => {
 
   const handleVerifyTokenSubmit = async (e) => {
     e.preventDefault();
-    setVerifyLoading(true);
     setErrorMsg('');
+
+    const cleanToken = tokenInput.replace(/\s/g, '');
+    if (!/^\d{6}$/.test(cleanToken)) {
+      setErrorMsg('Please enter a valid 6-digit collection OTP code');
+      return;
+    }
+
+    setVerifyLoading(true);
 
     try {
       await api.post(`/restaurant/reservations/${verifyingOrder._id}/verify`, {
-        token: tokenInput.replace(/\s/g, '') // remove spaces
+        token: cleanToken
       });
 
       setVerifySuccess(true);

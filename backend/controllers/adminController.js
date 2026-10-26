@@ -2,6 +2,7 @@ const User = require('../models/User');
 const RestaurantProfile = require('../models/RestaurantProfile');
 const FoodItem = require('../models/FoodItem');
 const Order = require('../models/Order');
+const { isValidObjectId } = require('../utils/validation');
 
 // @desc    Get all unverified restaurant profiles
 // @route   GET /api/admin/pending-restaurants
@@ -20,7 +21,14 @@ const getPendingRestaurants = async (req, res) => {
 // @route   PUT /api/admin/verify-restaurant/:id
 // @access  Private (Admin only)
 const verifyRestaurant = async (req, res) => {
+  if (!isValidObjectId(req.params.id)) {
+    return res.status(400).json({ message: 'Invalid restaurant profile ID' });
+  }
+
   const { action } = req.body; // 'approve' or 'reject'
+  if (!action || !['approve', 'reject'].includes(action)) {
+    return res.status(400).json({ message: 'Invalid action. Action must be approve or reject.' });
+  }
 
   try {
     const profile = await RestaurantProfile.findById(req.params.id);
@@ -39,8 +47,6 @@ const verifyRestaurant = async (req, res) => {
       await RestaurantProfile.findByIdAndDelete(req.params.id);
       await User.findByIdAndDelete(userId);
       res.json({ message: 'Restaurant profile rejected and account removed' });
-    } else {
-      res.status(400).json({ message: 'Invalid action. Use approve or reject.' });
     }
   } catch (error) {
     res.status(500).json({ message: error.message });

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../../services/api';
-import { Plus, BarChart3, Star, BadgeDollarSign, HeartHandshake, Utensils, Image, Trash2, Edit2, Bell, Clock } from 'lucide-react';
+import { Plus, BarChart3, Star, BadgeDollarSign, HeartHandshake, Utensils, Image, Trash2, Edit2, Bell, Clock, ShoppingBag } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 // Live Expiry & Pickup Countdown Timer Component
@@ -219,22 +219,58 @@ const RestaurantDashboard = () => {
 
   const handleModalSubmit = async (e) => {
     e.preventDefault();
-    setModalLoading(true);
     setErrorMsg('');
+
+    const trimmedName = name.trim();
+    if (!trimmedName || trimmedName.length < 2) {
+      setErrorMsg('Please enter a valid title (at least 2 characters)');
+      return;
+    }
+
+    const origPriceNum = parseFloat(originalPrice);
+    if (isNaN(origPriceNum) || origPriceNum <= 0) {
+      setErrorMsg('Original price must be a valid positive amount greater than $0');
+      return;
+    }
+
+    const discPriceNum = parseFloat(discountedPrice);
+    if (isNaN(discPriceNum) || discPriceNum < 0) {
+      setErrorMsg('Offer price cannot be negative');
+      return;
+    }
+
+    if (discPriceNum > origPriceNum) {
+      setErrorMsg(`Discounted price ($${discPriceNum.toFixed(2)}) cannot be greater than original price ($${origPriceNum.toFixed(2)})`);
+      return;
+    }
+
+    const qtyNum = parseInt(quantity, 10);
+    const minAllowedQty = editingItem ? 0 : 1;
+    if (isNaN(qtyNum) || qtyNum < minAllowedQty) {
+      setErrorMsg(editingItem ? 'Stock quantity cannot be negative (must be 0 or more)' : 'Stock quantity must be at least 1 item');
+      return;
+    }
+
+    if (!pickupStartTime || !pickupEndTime) {
+      setErrorMsg('Both pickup start time and end time are required');
+      return;
+    }
+
+    setModalLoading(true);
 
     // Form data for file upload support
     const formData = new FormData();
-    formData.append('name', name);
-    formData.append('description', description);
-    formData.append('originalPrice', originalPrice);
-    formData.append('discountedPrice', discountedPrice);
-    formData.append('quantity', quantity);
+    formData.append('name', trimmedName);
+    formData.append('description', description.trim());
+    formData.append('originalPrice', origPriceNum);
+    formData.append('discountedPrice', discPriceNum);
+    formData.append('quantity', qtyNum);
     formData.append('pickupStartTime', pickupStartTime);
     formData.append('pickupEndTime', pickupEndTime);
     formData.append('dietaryType', dietaryType);
     formData.append('allergens', JSON.stringify(allergens));
     formData.append('isSurpriseBag', isSurpriseBag);
-    formData.append('estimatedValue', estimatedValue || originalPrice);
+    formData.append('estimatedValue', estimatedValue ? parseFloat(estimatedValue) : origPriceNum);
     if (imageFile) {
       formData.append('image', imageFile);
     }
@@ -329,45 +365,57 @@ const RestaurantDashboard = () => {
 
       {/* Analytics Widgets */}
       {analytics && (
-        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '3rem' }} className="analytics-grid">
+        <section className="analytics-grid">
           
-          <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-            <div style={{ padding: '0.75rem', borderRadius: 'var(--border-radius-sm)', background: 'var(--color-primary-glow)' }}>
+          <div className="glass-panel analytics-widget">
+            <div className="analytics-widget-icon" style={{ background: 'var(--color-primary-glow)' }}>
               <BadgeDollarSign className="text-emerald" size={24} />
             </div>
-            <div>
-              <p className="text-muted" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Total Revenue</p>
-              <h3 style={{ fontSize: '1.5rem' }}>${analytics.totalRevenue.toFixed(2)}</h3>
+            <div className="analytics-widget-content">
+              <p className="analytics-widget-label">Total Revenue</p>
+              <h3 className="analytics-widget-value">${Math.max(0, analytics.totalRevenue || 0).toFixed(2)}</h3>
             </div>
           </div>
 
-          <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-            <div style={{ padding: '0.75rem', borderRadius: 'var(--border-radius-sm)', background: 'rgba(99, 102, 241, 0.1)' }}>
+          <div className="glass-panel analytics-widget">
+            <div className="analytics-widget-icon" style={{ background: 'rgba(16, 185, 129, 0.12)' }}>
+              <ShoppingBag className="text-emerald" size={24} />
+            </div>
+            <div className="analytics-widget-content">
+              <p className="analytics-widget-label">Available Stock</p>
+              <h3 className="analytics-widget-value">
+                {Math.max(0, analytics.totalStockAvailable ?? listings.filter(i => i.status === 'available').reduce((sum, item) => sum + Math.max(0, item.quantity), 0))} bags
+              </h3>
+            </div>
+          </div>
+
+          <div className="glass-panel analytics-widget">
+            <div className="analytics-widget-icon" style={{ background: 'rgba(99, 102, 241, 0.1)' }}>
               <HeartHandshake className="text-indigo" size={24} />
             </div>
-            <div>
-              <p className="text-muted" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Meals Rescued</p>
-              <h3 style={{ fontSize: '1.5rem' }}>{analytics.mealsSaved}</h3>
+            <div className="analytics-widget-content">
+              <p className="analytics-widget-label">Meals Rescued</p>
+              <h3 className="analytics-widget-value">{Math.max(0, analytics.mealsSaved || 0)}</h3>
             </div>
           </div>
 
-          <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-            <div style={{ padding: '0.75rem', borderRadius: 'var(--border-radius-sm)', background: 'rgba(245, 158, 11, 0.1)' }}>
+          <div className="glass-panel analytics-widget">
+            <div className="analytics-widget-icon" style={{ background: 'rgba(245, 158, 11, 0.1)' }}>
               <Star className="text-amber" size={24} fill="currentColor" />
             </div>
-            <div>
-              <p className="text-muted" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Rating Average</p>
-              <h3 style={{ fontSize: '1.5rem' }}>{analytics.rating} / 5</h3>
+            <div className="analytics-widget-content">
+              <p className="analytics-widget-label">Rating Average</p>
+              <h3 className="analytics-widget-value">{analytics.rating ? Number(analytics.rating).toFixed(1) : '5.0'} / 5</h3>
             </div>
           </div>
 
-          <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-            <div style={{ padding: '0.75rem', borderRadius: 'var(--border-radius-sm)', background: 'rgba(255, 255, 255, 0.05)' }}>
+          <div className="glass-panel analytics-widget">
+            <div className="analytics-widget-icon" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
               <BarChart3 className="text-secondary" size={24} />
             </div>
-            <div>
-              <p className="text-muted" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Bookings Queue</p>
-              <h3 style={{ fontSize: '1.5rem' }}>{analytics.activeReservationsCount} active</h3>
+            <div className="analytics-widget-content">
+              <p className="analytics-widget-label">Bookings Queue</p>
+              <h3 className="analytics-widget-value">{Math.max(0, analytics.activeReservationsCount || 0)} active</h3>
             </div>
           </div>
 
@@ -414,10 +462,12 @@ const RestaurantDashboard = () => {
 
                 {/* Details */}
                 <div style={{ flexGrow: 1 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <h3 style={{ fontSize: '1.15rem' }}>{item.name}</h3>
-                    <span className={`badge ${item.status === 'available' ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: '0.65rem' }}>
-                      {item.status}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', gap: '0.5rem' }}>
+                    <h3 style={{ fontSize: '1.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }} title={item.name}>
+                      {item.name}
+                    </h3>
+                    <span className={`badge ${item.status === 'available' && item.quantity > 0 ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: '0.65rem', flexShrink: 0 }}>
+                      {item.status === 'available' && item.quantity > 0 ? `${item.quantity} in stock` : 'Sold out'}
                     </span>
                   </div>
 
@@ -425,12 +475,17 @@ const RestaurantDashboard = () => {
                     {item.description || 'No description provided.'}
                   </p>
 
-                  <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
-                    <p><strong>Original Price:</strong> ${item.originalPrice.toFixed(2)}</p>
-                    <p><strong>Offer Price:</strong> <span className="text-emerald" style={{ fontWeight: 600 }}>${item.discountedPrice.toFixed(2)}</span></p>
-                    <p><strong>In Stock:</strong> {item.quantity} bags</p>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <p><strong>Pickup window:</strong> {item.pickupStartTime} - {item.pickupEndTime}</p>
+                  <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
+                    <p><strong>Original Price:</strong> ${Math.max(0, item.originalPrice || 0).toFixed(2)}</p>
+                    <p><strong>Offer Price:</strong> <span className="text-emerald" style={{ fontWeight: 600 }}>${Math.max(0, item.discountedPrice || 0).toFixed(2)}</span></p>
+                    <p>
+                      <strong>In Stock:</strong>{' '}
+                      <span className={item.quantity > 0 ? 'text-emerald' : 'text-rose'} style={{ fontWeight: 600 }}>
+                        {Math.max(0, item.quantity)} {item.quantity === 1 ? 'bag' : 'bags'} {item.quantity <= 0 ? '(Sold Out)' : ''}
+                      </span>
+                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.2rem' }}>
+                      <p style={{ margin: 0, fontSize: '0.78rem' }}><strong>Pickup:</strong> {item.pickupStartTime} - {item.pickupEndTime}</p>
                       <ExpiryTimer expiryDate={item.expiryDate} pickupEndTime={item.pickupEndTime} />
                     </div>
                     <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
@@ -478,7 +533,7 @@ const RestaurantDashboard = () => {
       {/* Creation/Editing Modal Overlay */}
       {showModal && (
         <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '550px' }}>
+          <div className="modal-content" style={{ maxWidth: '560px', width: '100%', maxHeight: '90vh', overflowY: 'auto', overflowX: 'hidden', boxSizing: 'border-box' }}>
             <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
             
             <h3 style={{ fontSize: '1.5rem', marginBottom: '1.5rem', fontFamily: 'var(--font-display)' }}>
@@ -581,61 +636,112 @@ const RestaurantDashboard = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }} className="form-price-qty-row">
-                <div className="form-group">
+              <div 
+                className="form-price-qty-row" 
+                style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', 
+                  gap: '0.75rem', 
+                  width: '100%',
+                  boxSizing: 'border-box' 
+                }}
+              >
+                <div className="form-group" style={{ minWidth: 0, width: '100%' }}>
                   <label className="form-label">Original ($)</label>
                   <input 
                     type="number" 
                     required 
+                    min="0.01"
                     step="0.01" 
                     placeholder="12.50" 
                     className="form-control"
+                    style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }}
                     value={originalPrice} 
-                    onChange={(e) => setOriginalPrice(e.target.value)} 
+                    onKeyDown={(e) => { if (e.key === '-' || e.key === 'Subtract' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
+                    onPaste={(e) => {
+                      const text = e.clipboardData.getData('text');
+                      if (text.includes('-')) {
+                        e.preventDefault();
+                        setOriginalPrice(text.replace(/-/g, ''));
+                      }
+                    }}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/-/g, '');
+                      setOriginalPrice(v);
+                    }} 
                   />
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ minWidth: 0, width: '100%' }}>
                   <label className="form-label">Discount ($)</label>
                   <input 
                     type="number" 
                     required 
+                    min="0"
                     step="0.01" 
                     placeholder="4.00" 
                     className="form-control"
+                    style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }}
                     value={discountedPrice} 
-                    onChange={(e) => setDiscountedPrice(e.target.value)} 
+                    onKeyDown={(e) => { if (e.key === '-' || e.key === 'Subtract' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
+                    onPaste={(e) => {
+                      const text = e.clipboardData.getData('text');
+                      if (text.includes('-')) {
+                        e.preventDefault();
+                        setDiscountedPrice(text.replace(/-/g, ''));
+                      }
+                    }}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/-/g, '');
+                      setDiscountedPrice(v);
+                    }} 
                   />
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ minWidth: 0, width: '100%' }}>
                   <label className="form-label">Stock Qty</label>
                   <input 
                     type="number" 
                     required 
+                    min={editingItem ? '0' : '1'}
+                    step="1"
                     placeholder="5" 
                     className="form-control"
+                    style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }}
                     value={quantity} 
-                    onChange={(e) => setQuantity(e.target.value)} 
+                    onKeyDown={(e) => { if (e.key === '-' || e.key === 'Subtract' || e.key === '.' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
+                    onPaste={(e) => {
+                      const text = e.clipboardData.getData('text');
+                      if (text.includes('-') || text.includes('.')) {
+                        e.preventDefault();
+                        setQuantity(text.replace(/[^0-9]/g, ''));
+                      }
+                    }}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/[^0-9]/g, '');
+                      setQuantity(v);
+                    }} 
                   />
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div className="form-group">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.75rem', width: '100%', boxSizing: 'border-box' }}>
+                <div className="form-group" style={{ minWidth: 0, width: '100%' }}>
                   <label className="form-label">Pickup Start Time</label>
                   <input 
                     type="time" 
                     required 
                     className="form-control"
+                    style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }}
                     value={pickupStartTime} 
                     onChange={(e) => setPickupStartTime(e.target.value)} 
                   />
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ minWidth: 0, width: '100%' }}>
                   <label className="form-label">Pickup End Time</label>
                   <input 
                     type="time" 
                     required 
                     className="form-control"
+                    style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }}
                     value={pickupEndTime} 
                     onChange={(e) => setPickupEndTime(e.target.value)} 
                   />
@@ -670,18 +776,10 @@ const RestaurantDashboard = () => {
       )}
 
       <style>{`
-        @media (max-width: 768px) {
-          .analytics-grid {
-            grid-template-columns: 1fr 1fr !important;
-          }
+        @media (max-width: 520px) {
           .form-price-qty-row {
             grid-template-columns: 1fr !important;
-            gap: 0 !important;
-          }
-        }
-        @media (max-width: 480px) {
-          .analytics-grid {
-            grid-template-columns: 1fr !important;
+            gap: 0.75rem !important;
           }
         }
       `}</style>

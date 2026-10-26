@@ -134,15 +134,19 @@ const SystemListings = () => {
                   {/* Price */}
                   <td>
                     <span style={{ textDecoration: 'line-through', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                      ${item.originalPrice.toFixed(2)}
+                      ${Math.max(0, item.originalPrice || 0).toFixed(2)}
                     </span>
                     <span className="text-emerald" style={{ fontWeight: 600, marginLeft: '0.5rem' }}>
-                      ${item.discountedPrice.toFixed(2)}
+                      ${Math.max(0, item.discountedPrice || 0).toFixed(2)}
                     </span>
                   </td>
 
                   {/* Stock */}
-                  <td>{item.quantity} items</td>
+                  <td>
+                    <span className={item.quantity > 0 ? '' : 'text-rose'} style={{ fontWeight: item.quantity > 0 ? 400 : 600 }}>
+                      {Math.max(0, item.quantity)} {item.quantity === 1 ? 'item' : 'items'}
+                    </span>
+                  </td>
 
                   {/* Expiration */}
                   <td>
